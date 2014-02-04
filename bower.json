@@ -29,7 +29,8 @@
     "csv": "~0.1.2",
     "ngStorage": "~0.1.7",
     "lazy.js": "~0.3.2",
-    "angular-moment": "~0.6.1"
+    "angular-moment": "~0.6.1",
+    "checklist-model": "~0.1.1"
   },
   "license": "MIT",
   "private": true,
