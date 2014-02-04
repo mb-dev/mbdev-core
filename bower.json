@@ -10,7 +10,6 @@
     "console-polyfill": "0.1.0",
     "jquery": "2.0.3",
     "bootstrap": "3.1.0",
-    "angular-bootstrap": "0.6.0",
     "angular": "1.2.11",
     "angular-sanitize": "1.2.11",
     "angular-resource": "1.2.11",
@@ -18,14 +17,15 @@
     "angular-cookies": "1.2.11",
     "angular-mocks": "1.2.11",
     "angular-ui-select2": "0.0.5",
-    "angular-strap": "0.7.5",
+    "angular-strap": "~2.0.0",
     "typeahead.js": "0.9.3",
     "angular-typeahead": "0.0.12",
     "select2": "3.4.5",
     "pickadate": "3.3.1",
     "sjcl": "1.0.0",
     "selectize": "0.8.5",
-    "components-font-awesome": "4.0.3"
+    "components-font-awesome": "4.0.3",
+    "momentjs": "2.5.1"
   },
   "license": "MIT",
   "private": true,
@@ -38,6 +38,6 @@
   ],
   "resolutions": {
     "jquery": "2.0.3",
-    "bootstrap": "3.1.0"
+    "bootstrap": "~3.1.0"
   }
 }
