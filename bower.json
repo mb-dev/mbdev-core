@@ -1,0 +1,43 @@
+{
+  "name": "mbdev-core",
+  "version": "1.0.0",
+  "homepage": "https://github.com/mb-dev/finance-ng",
+  "authors": [
+    "Moshe Bergman <mbergman@twitter.com>"
+  ],
+  "description": "Core components for mb-dev sites",
+  "dependencies": {
+    "console-polyfill": "0.1.0",
+    "jquery": "2.0.3",
+    "bootstrap": "3.1.0",
+    "angular-bootstrap": "0.6.0",
+    "angular": "1.2.11",
+    "angular-sanitize": "1.2.11",
+    "angular-resource": "1.2.11",
+    "angular-route": "1.2.11",
+    "angular-cookies": "1.2.11",
+    "angular-mocks": "1.2.11",
+    "angular-ui-select2": "0.0.5",
+    "angular-strap": "0.7.5",
+    "typeahead.js": "0.9.3",
+    "angular-typeahead": "0.0.12",
+    "select2": "3.4.5",
+    "pickadate": "3.3.1",
+    "sjcl": "1.0.0",
+    "selectize": "0.8.5",
+    "components-font-awesome": "4.0.3"
+  },
+  "license": "MIT",
+  "private": true,
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "resolutions": {
+    "jquery": "2.0.3",
+    "bootstrap": "3.1.0"
+  }
+}
