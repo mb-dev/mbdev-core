@@ -3,6 +3,15 @@ module.exports = (grunt) ->
   # Project configuration.
   grunt.initConfig
     pkg: grunt.file.readJSON("package.json")
+    coffee:
+      options: {}
+      files: 
+        expand: true
+        flatten: true
+        src: "**/*.coffee"
+        dest: "dist/js/"
+        ext: ".js"
+        cwd: "js"
     copy:
       css:
         files: [
@@ -89,7 +98,7 @@ module.exports = (grunt) ->
   grunt.loadNpmTasks "grunt-contrib-less"
   
   # Default task(s).
-  grunt.registerTask "scripts", "", ["concat:scripts"]
+  grunt.registerTask "scripts", "", ["coffee", "concat:scripts"]
   grunt.registerTask "css", "", ["concat:css"]
   grunt.registerTask "templates", "", ["jade"]
   grunt.registerTask "fonts", "", ["copy:fonts"]
