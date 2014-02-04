@@ -1,9 +1,9 @@
 {
   "name": "mbdev-core",
   "version": "1.0.0",
-  "homepage": "https://github.com/mb-dev/finance-ng",
+  "homepage": "https://github.com/mb-dev/mbdev-core",
   "authors": [
-    "Moshe Bergman <mbergman@twitter.com>"
+    "Moshe Bergman <bergmanm@gmail.com>"
   ],
   "description": "Core components for mb-dev sites",
   "dependencies": {
@@ -24,13 +24,13 @@
     "pickadate": "3.3.1",
     "sjcl": "1.0.0",
     "selectize": "0.8.5",
-    "components-font-awesome": "4.0.3",
     "bignumber.js": "~1.3.0",
     "csv": "~0.1.2",
     "ngStorage": "~0.1.7",
     "lazy.js": "~0.3.2",
     "angular-moment": "~0.6.1",
-    "checklist-model": "~0.1.1"
+    "checklist-model": "~0.1.1",
+    "font-awesome": "~4.0.3"
   },
   "license": "MIT",
   "private": true,
