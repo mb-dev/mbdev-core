@@ -15,7 +15,7 @@
     "angular-resource": "1.2.11",
     "angular-route": "1.2.11",
     "angular-cookies": "1.2.11",
-    "angular-mocks": "1.2.11",
+    "angular-mocks": "~1.2.11",
     "angular-ui-select2": "0.0.5",
     "angular-strap": "~2.0.0",
     "typeahead.js": "0.9.3",
