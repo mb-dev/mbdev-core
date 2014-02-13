@@ -41,21 +41,23 @@ module.exports = (grunt) ->
       scripts:
         files: 
           "dist/js/vendor.js": [
+            'bower_components/jquery/jquery.min.js',
+            'bower_components/select2/select2.js',
             'bower_components/bootstrap/dist/js/bootstrap.js',
             'bower_components/momentjs/moment.js',
             'bower_components/bignumber.js/bignumber.js',
             'bower_components/lazy.js/lazy.js',
-            'bower_components/select2.js',
             'bower_components/typeahead.js/dist/typeahead.js'
+            'bower_components/angular/angular.min.js'
             'bower_components/angular-mocks/angular-mocks.js'
-            'bower_components/angular-resource/angular-resource.js'
+            'bower_components/angular-route/angular-route.min.js'
+            'bower_components/angular-sanitize/angular-sanitize.min.js'
+            'bower_components/angular-resource/angular-resource.min.js'
             'bower_components/angular-cookies/angular-cookies.js'
             'bower_components/angular-moment/angular-moment.js'
-            'bower_components/angular-route/angular-route.js'
-            'bower_components/angular-sanitize/angular-sanitize.js'
-            'bower_components/angular-ui-select2/src/select2.js'
-            'vendor/js/angular-filesystem.js'
             'bower_components/angular-typeahead/angular-typeahead.js'
+            'vendor/js/angular-filesystem.js'
+            'bower_components/angular-ui-select2/src/select2.js'
             'bower_components/checklist-model/checklist-model.js'
             'bower_components/ngStorage/src/angularLocalStorage.js'
             'bower_components/pickadate/lib/angular/picker.js'

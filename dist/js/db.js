@@ -1,3 +1,4 @@
+
 /*
 weird functions to fix issues:
 convertId = function(id) { return parseInt(id[0], 10) + id.length - 1 }
@@ -51,8 +52,7 @@ angular.element('ng-view').injector().get('fdb').processingRules().collection.fo
    item.id = index + 1;
    angular.element('ng-view').injector().get('fdb').processingRules().actualCollection[item.key].id = index + 1;
 })
-*/
-
+ */
 
 (function() {
   var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
@@ -102,13 +102,14 @@ angular.element('ng-view').injector().get('fdb').processingRules().collection.fo
     };
 
     Collection.prototype.reExtendItems = function() {
-      var _this = this;
       if (!this.itemExtendFunc) {
         return;
       }
-      return this.collection.forEach(function(item) {
-        return _this.itemExtendFunc(item);
-      });
+      return this.collection.forEach((function(_this) {
+        return function(item) {
+          return _this.itemExtendFunc(item);
+        };
+      })(this));
     };
 
     Collection.prototype.getAvailableId = function() {
@@ -131,14 +132,15 @@ angular.element('ng-view').injector().get('fdb').processingRules().collection.fo
     };
 
     Collection.prototype.findByIds = function(ids) {
-      var result,
-        _this = this;
+      var result;
       if (!ids) {
         return [];
       }
-      result = Lazy(ids).map(function(id) {
-        return _this.collection[_this.idIndex[id]];
-      }).toArray();
+      result = Lazy(ids).map((function(_this) {
+        return function(id) {
+          return _this.collection[_this.idIndex[id]];
+        };
+      })(this)).toArray();
       if (result) {
         result = angular.copy(result);
       }
@@ -303,10 +305,11 @@ angular.element('ng-view').injector().get('fdb').processingRules().collection.fo
     };
 
     Collection.prototype.afterLoadCollection = function() {
-      var _this = this;
-      this.collection.forEach(function(item) {
-        return _this.correctId(item);
-      });
+      this.collection.forEach((function(_this) {
+        return function(item) {
+          return _this.correctId(item);
+        };
+      })(this));
       this.$buildIndex();
       return this.migrateIfNeeded();
     };
@@ -440,7 +443,6 @@ angular.element('ng-view').injector().get('fdb').processingRules().collection.fo
     };
 
     SimpleCollection.prototype.findOrCreate = function(items) {
-      var _this = this;
       if (!items) {
         return;
       }
@@ -450,9 +452,11 @@ angular.element('ng-view').injector().get('fdb').processingRules().collection.fo
       if (!items[0]) {
         return;
       }
-      return items.forEach(function(item) {
-        return _this.set(item, true);
-      });
+      return items.forEach((function(_this) {
+        return function(item) {
+          return _this.set(item, true);
+        };
+      })(this));
     };
 
     SimpleCollection.prototype.onModified = function() {
@@ -499,25 +503,30 @@ angular.element('ng-view').injector().get('fdb').processingRules().collection.fo
     };
 
     SimpleCollection.prototype.afterLoadCollection = function() {
-      var items,
-        _this = this;
+      var items;
       if (this.collection instanceof Array) {
-        this.collection.forEach(function(item) {
-          return _this.correctId(item);
-        });
-        this.$buildIndex();
-        return this.collection.forEach(function(item) {
-          return _this.actualCollection[item.key] = {
-            id: item.id,
-            value: item.value
+        this.collection.forEach((function(_this) {
+          return function(item) {
+            return _this.correctId(item);
           };
-        });
+        })(this));
+        this.$buildIndex();
+        return this.collection.forEach((function(_this) {
+          return function(item) {
+            return _this.actualCollection[item.key] = {
+              id: item.id,
+              value: item.value
+            };
+          };
+        })(this));
       } else {
         items = this.collection;
         this.collection = [];
-        Lazy(items).keys().each(function(key) {
-          return _this.set(key, items[key]);
-        });
+        Lazy(items).keys().each((function(_this) {
+          return function(key) {
+            return _this.set(key, items[key]);
+          };
+        })(this));
         return this.actionsLog = [];
       }
     };
@@ -566,29 +575,31 @@ angular.element('ng-view').injector().get('fdb').processingRules().collection.fo
     };
 
     Database.prototype.readTablesFromFS = function(tableNames) {
-      var promises,
-        _this = this;
-      promises = tableNames.map(function(tableName) {
-        return _this.fileSystem.readFile('/db/' + _this.fileName(_this.db.user.id, tableName)).then(function(content) {
-          return {
-            name: tableName,
-            content: JSON.parse(content)
-          };
-        });
-      });
+      var promises;
+      promises = tableNames.map((function(_this) {
+        return function(tableName) {
+          return _this.fileSystem.readFile('/db/' + _this.fileName(_this.db.user.id, tableName)).then(function(content) {
+            return {
+              name: tableName,
+              content: JSON.parse(content)
+            };
+          });
+        };
+      })(this));
       return this.$q.all(promises);
     };
 
     Database.prototype.writeTablesToFS = function(tableNames) {
-      var promises,
-        _this = this;
-      promises = tableNames.map(function(tableName) {
-        return _this.fileSystem.writeText('/db/' + _this.fileName(_this.db.user.id, tableName), angular.toJson(_this.collectionToStorage(tableName))).then(function() {
-          return console.log('write', tableName, 'to FS');
-        }, function(err) {
-          return console.log('failed to write', tableName, 'to FS', err);
-        });
-      });
+      var promises;
+      promises = tableNames.map((function(_this) {
+        return function(tableName) {
+          return _this.fileSystem.writeText('/db/' + _this.fileName(_this.db.user.id, tableName), angular.toJson(_this.collectionToStorage(tableName))).then(function() {
+            return console.log('write', tableName, 'to FS');
+          }, function(err) {
+            return console.log('failed to write', tableName, 'to FS', err);
+          });
+        };
+      })(this));
       return this.$q.all(promises);
     };
 
@@ -603,26 +614,28 @@ angular.element('ng-view').injector().get('fdb').processingRules().collection.fo
     };
 
     Database.prototype.dumpAllCollections = function(tableList) {
-      var result,
-        _this = this;
+      var result;
       result = {};
-      result[this.appName] = Lazy(tableList).map(function(tableName) {
-        return {
-          name: tableName,
-          content: _this.collectionToStorage(tableName)
+      result[this.appName] = Lazy(tableList).map((function(_this) {
+        return function(tableName) {
+          return {
+            name: tableName,
+            content: _this.collectionToStorage(tableName)
+          };
         };
-      }).toArray();
+      })(this)).toArray();
       return result;
     };
 
     Database.prototype.authenticate = function() {
-      var defer,
-        _this = this;
+      var defer;
       defer = this.$q.defer();
-      this.$http.get('/data/authenticate').success(function(response, status, headers) {
-        _this.$localStorage.user = response.user;
-        return defer.resolve();
-      }).error(function(data, status, headers) {
+      this.$http.get('/data/authenticate').success((function(_this) {
+        return function(response, status, headers) {
+          _this.$localStorage.user = response.user;
+          return defer.resolve();
+        };
+      })(this)).error(function(data, status, headers) {
         return defer.reject({
           data: data,
           status: status,
@@ -633,134 +646,156 @@ angular.element('ng-view').injector().get('fdb').processingRules().collection.fo
     };
 
     Database.prototype.readTablesFromWeb = function(tableList, forceLoadAll) {
-      var deferred, promises, staleTableList,
-        _this = this;
+      var deferred, promises, staleTableList;
       staleTableList = [];
       if (forceLoadAll) {
         staleTableList = tableList;
       } else {
-        tableList.forEach(function(tableName) {
-          var dbModel, lastModifiedServerTime;
-          dbModel = _this.db[tableName];
-          lastModifiedServerTime = _this.db.user.lastModifiedDate["" + _this.appName + "-" + tableName];
-          if (lastModifiedServerTime && lastModifiedServerTime > dbModel.updatedAt) {
-            return staleTableList.push(tableName);
-          }
-        });
+        tableList.forEach((function(_this) {
+          return function(tableName) {
+            var dbModel, lastModifiedServerTime;
+            dbModel = _this.db[tableName];
+            lastModifiedServerTime = _this.db.user.lastModifiedDate["" + _this.appName + "-" + tableName];
+            if (lastModifiedServerTime && lastModifiedServerTime > dbModel.updatedAt) {
+              return staleTableList.push(tableName);
+            }
+          };
+        })(this));
       }
       deferred = this.$q.defer();
       promises = [];
-      staleTableList.forEach(function(tableName) {
-        var dbModel, getDataFrom, promise;
-        dbModel = _this.db[tableName];
-        if (forceLoadAll) {
-          dbModel.reset();
-          getDataFrom = 0;
-        } else {
-          getDataFrom = dbModel.updatedAt;
-        }
-        promise = _this.$http.get(("/data/" + _this.appName + "/" + tableName + "?") + $.param({
-          updatedAt: getDataFrom
-        })).then(function(response) {
-          var err;
-          try {
-            dbModel.actionsLog = [];
-            return response.data.actions.forEach(function(op) {
-              if (op.action === 'update') {
-                try {
-                  return dbModel.$updateOrSet(JSON.parse(sjcl.decrypt(_this.$localStorage["" + _this.db.user.id + "-encryptionKey"], op.item)), op.updatedAt);
-                } catch (_error) {
-                  console.log('failed to decrypt', tableName, op);
-                  throw 'failed to decrypt';
-                }
-              } else if (op.action === 'delete') {
-                return dbModel.$deleteItem(op.id, op.updatedAt);
-              }
-            });
-          } catch (_error) {
-            err = _error;
-            console.log("error updating " + tableName + " after getting response from web");
-            throw err;
+      staleTableList.forEach((function(_this) {
+        return function(tableName) {
+          var dbModel, getDataFrom, promise;
+          dbModel = _this.db[tableName];
+          if (forceLoadAll) {
+            dbModel.reset();
+            getDataFrom = 0;
+          } else {
+            getDataFrom = dbModel.updatedAt;
           }
-        });
-        return promises.push(promise);
-      });
-      this.$q.all(promises).then(function(actions) {
-        return deferred.resolve(staleTableList);
-      }, function(fail) {
-        console.log('fail', fail);
-        return deferred.reject({
-          data: fail.data,
-          status: fail.status,
-          headers: fail.headers
-        });
-      });
+          promise = _this.$http.get(("/data/" + _this.appName + "/" + tableName + "?") + $.param({
+            updatedAt: getDataFrom
+          })).then(function(response) {
+            var err;
+            try {
+              dbModel.actionsLog = [];
+              return response.data.actions.forEach(function(op) {
+                if (op.action === 'update') {
+                  try {
+                    return dbModel.$updateOrSet(JSON.parse(sjcl.decrypt(_this.$localStorage["" + _this.db.user.id + "-encryptionKey"], op.item)), op.updatedAt);
+                  } catch (_error) {
+                    console.log('failed to decrypt', tableName, op);
+                    throw 'failed to decrypt';
+                  }
+                } else if (op.action === 'delete') {
+                  return dbModel.$deleteItem(op.id, op.updatedAt);
+                }
+              });
+            } catch (_error) {
+              err = _error;
+              console.log("error updating " + tableName + " after getting response from web");
+              throw err;
+            }
+          });
+          return promises.push(promise);
+        };
+      })(this));
+      this.$q.all(promises).then((function(_this) {
+        return function(actions) {
+          return deferred.resolve(staleTableList);
+        };
+      })(this), (function(_this) {
+        return function(fail) {
+          console.log('fail', fail);
+          return deferred.reject({
+            data: fail.data,
+            status: fail.status,
+            headers: fail.headers
+          });
+        };
+      })(this));
       return deferred.promise;
     };
 
     Database.prototype.performGet = function(tableList, options) {
-      var copyUserDataFromSession, deferred, loadDataSet, loadedDataFromFS, onAuthenticated, onFailedAuthenticate, onFailedReadTablesFromFS, onFailedReadTablesFromWeb, onReadTablesFromFS, onReadTablesFromWeb,
-        _this = this;
+      var copyUserDataFromSession, deferred, loadDataSet, loadedDataFromFS, onAuthenticated, onFailedAuthenticate, onFailedReadTablesFromFS, onFailedReadTablesFromWeb, onReadTablesFromFS, onReadTablesFromWeb;
       deferred = this.$q.defer();
       loadedDataFromFS = false;
-      copyUserDataFromSession = function() {
-        return _this.db.user = angular.extend(_this.db.user, angular.copy(_this.$localStorage.user));
-      };
-      onAuthenticated = function() {
-        if (!_this.$localStorage["" + _this.db.user.id + "-encryptionKey"]) {
-          return deferred.reject({
-            data: {
-              reason: 'missing_key'
-            },
-            status: 403
-          });
-        } else {
-          copyUserDataFromSession();
-          if (options.initialState === 'authenticate') {
-            return _this.readTablesFromWeb(tableList).then(onReadTablesFromWeb, onFailedReadTablesFromWeb);
+      copyUserDataFromSession = (function(_this) {
+        return function() {
+          return _this.db.user = angular.extend(_this.db.user, angular.copy(_this.$localStorage.user));
+        };
+      })(this);
+      onAuthenticated = (function(_this) {
+        return function() {
+          if (!_this.$localStorage["" + _this.db.user.id + "-encryptionKey"]) {
+            return deferred.reject({
+              data: {
+                reason: 'missing_key'
+              },
+              status: 403
+            });
           } else {
-            return _this.readTablesFromFS(tableList).then(onReadTablesFromFS, onFailedReadTablesFromFS);
+            copyUserDataFromSession();
+            if (options.initialState === 'authenticate') {
+              return _this.readTablesFromWeb(tableList).then(onReadTablesFromWeb, onFailedReadTablesFromWeb);
+            } else {
+              return _this.readTablesFromFS(tableList).then(onReadTablesFromFS, onFailedReadTablesFromFS);
+            }
           }
-        }
-      };
-      onFailedAuthenticate = function(response) {
-        return deferred.reject(response);
-      };
-      onReadTablesFromWeb = function(staleTables) {
-        _this.writeTablesToFS(staleTables);
-        if (staleTables.length > 0) {
-          console.log('stale data sets ', staleTables, ' were updated from the web - resolving');
-        }
-        return deferred.resolve(_this);
-      };
-      onFailedReadTablesFromWeb = function(response) {
-        return deferred.reject(response);
-      };
-      onReadTablesFromFS = function(fileContents) {
-        loadedDataFromFS = true;
-        fileContents.forEach(loadDataSet);
-        console.log('read data sets ', tableList, ' from file system - resolving');
-        return deferred.resolve(_this);
-      };
-      onFailedReadTablesFromFS = function() {
-        return _this.readTablesFromWeb(tableList).then(onReadTablesFromWeb, onFailedReadTablesFromWeb);
-      };
-      loadDataSet = function(dataSet) {
-        var dbModel;
-        dbModel = _this.db[dataSet.name];
-        if (!dataSet.content) {
-          console.log('failed to load ' + dataSet.name);
-          return;
-        }
-        if (!dataSet.content.version) {
-          console.log('failed to load ' + dataSet.name + ' - version missing');
-          return;
-        }
-        dbModel.updatedAt = dataSet.content.updatedAt;
-        dbModel.collection = dataSet.content.data;
-        dbModel.afterLoadCollection();
-        return dbModel.reExtendItems();
-      };
+        };
+      })(this);
+      onFailedAuthenticate = (function(_this) {
+        return function(response) {
+          return deferred.reject(response);
+        };
+      })(this);
+      onReadTablesFromWeb = (function(_this) {
+        return function(staleTables) {
+          _this.writeTablesToFS(staleTables);
+          if (staleTables.length > 0) {
+            console.log('stale data sets ', staleTables, ' were updated from the web - resolving');
+          }
+          return deferred.resolve(_this);
+        };
+      })(this);
+      onFailedReadTablesFromWeb = (function(_this) {
+        return function(response) {
+          return deferred.reject(response);
+        };
+      })(this);
+      onReadTablesFromFS = (function(_this) {
+        return function(fileContents) {
+          loadedDataFromFS = true;
+          fileContents.forEach(loadDataSet);
+          console.log('read data sets ', tableList, ' from file system - resolving');
+          return deferred.resolve(_this);
+        };
+      })(this);
+      onFailedReadTablesFromFS = (function(_this) {
+        return function() {
+          return _this.readTablesFromWeb(tableList).then(onReadTablesFromWeb, onFailedReadTablesFromWeb);
+        };
+      })(this);
+      loadDataSet = (function(_this) {
+        return function(dataSet) {
+          var dbModel;
+          dbModel = _this.db[dataSet.name];
+          if (!dataSet.content) {
+            console.log('failed to load ' + dataSet.name);
+            return;
+          }
+          if (!dataSet.content.version) {
+            console.log('failed to load ' + dataSet.name + ' - version missing');
+            return;
+          }
+          dbModel.updatedAt = dataSet.content.updatedAt;
+          dbModel.collection = dataSet.content.data;
+          dbModel.afterLoadCollection();
+          return dbModel.reExtendItems();
+        };
+      })(this);
       if (options.initialState === 'authenticate') {
         this.authenticate().then(onAuthenticated, onFailedAuthenticate);
       } else {
@@ -811,56 +846,61 @@ angular.element('ng-view').injector().get('fdb').processingRules().collection.fo
     };
 
     Database.prototype.saveTables = function(tableList, forceServerCleanAndSaveAll) {
-      var deferred, promises,
-        _this = this;
+      var deferred, promises;
       if (forceServerCleanAndSaveAll == null) {
         forceServerCleanAndSaveAll = false;
       }
       deferred = this.$q.defer();
       promises = [];
-      tableList.forEach(function(tableName) {
-        var actions, dbModel, promise;
-        dbModel = _this.db[tableName];
-        actions = [];
-        if (forceServerCleanAndSaveAll) {
-          dbModel.collection.forEach(function(item) {
-            return actions.push({
-              action: 'insert',
-              id: item.id,
-              item: sjcl.encrypt(_this.$localStorage["" + _this.db.user.id + "-encryptionKey"], angular.toJson(item))
+      tableList.forEach((function(_this) {
+        return function(tableName) {
+          var actions, dbModel, promise;
+          dbModel = _this.db[tableName];
+          actions = [];
+          if (forceServerCleanAndSaveAll) {
+            dbModel.collection.forEach(function(item) {
+              return actions.push({
+                action: 'insert',
+                id: item.id,
+                item: sjcl.encrypt(_this.$localStorage["" + _this.db.user.id + "-encryptionKey"], angular.toJson(item))
+              });
             });
+          } else {
+            actions = dbModel.actionsLog;
+            actions.forEach(function(action) {
+              if (action.item) {
+                return action.item = sjcl.encrypt(_this.$localStorage["" + _this.db.user.id + "-encryptionKey"], angular.toJson(action.item));
+              }
+            });
+          }
+          promise = _this.$http.post("/data/" + _this.appName + "/" + tableName + "?all=" + (!!forceServerCleanAndSaveAll), actions).then(function(response) {
+            dbModel.updatedAt = response.data.updatedAt;
+            _this.db.user.lastModifiedDate["" + _this.appName + "-" + tableName] = dbModel.updatedAt;
+            _this.$localStorage.user.lastModifiedDate["" + _this.appName + "-" + tableName] = dbModel.updatedAt;
+            return dbModel.actionsLog = [];
           });
-        } else {
-          actions = dbModel.actionsLog;
-          actions.forEach(function(action) {
-            if (action.item) {
-              return action.item = sjcl.encrypt(_this.$localStorage["" + _this.db.user.id + "-encryptionKey"], angular.toJson(action.item));
-            }
+          return promises.push(promise);
+        };
+      })(this));
+      this.$q.all(promises).then((function(_this) {
+        return function(actions) {
+          return _this.writeTablesToFS(tableList).then(function() {
+            return deferred.resolve(true);
+          }, function(error) {
+            console.log('failed to write files to file system', error);
+            return deferred.reject('failed to write to file system');
           });
-        }
-        promise = _this.$http.post("/data/" + _this.appName + "/" + tableName + "?all=" + (!!forceServerCleanAndSaveAll), actions).then(function(response) {
-          dbModel.updatedAt = response.data.updatedAt;
-          _this.db.user.lastModifiedDate["" + _this.appName + "-" + tableName] = dbModel.updatedAt;
-          _this.$localStorage.user.lastModifiedDate["" + _this.appName + "-" + tableName] = dbModel.updatedAt;
-          return dbModel.actionsLog = [];
-        });
-        return promises.push(promise);
-      });
-      this.$q.all(promises).then(function(actions) {
-        return _this.writeTablesToFS(tableList).then(function() {
-          return deferred.resolve(true);
-        }, function(error) {
-          console.log('failed to write files to file system', error);
-          return deferred.reject('failed to write to file system');
-        });
-      }, function(fail) {
-        console.log('fail', fail);
-        return deferred.reject({
-          data: fail.data,
-          status: fail.status,
-          headers: fail.headers
-        });
-      });
+        };
+      })(this), (function(_this) {
+        return function(fail) {
+          console.log('fail', fail);
+          return deferred.reject({
+            data: fail.data,
+            status: fail.status,
+            headers: fail.headers
+          });
+        };
+      })(this));
       return deferred.promise;
     };
 
@@ -896,7 +936,7 @@ angular.element('ng-view').injector().get('fdb').processingRules().collection.fo
           column['values'] = {};
           return Lazy(valueTypes).each(function(type) {
             var _base;
-            return (_base = column['values'])[type] != null ? (_base = column['values'])[type] : _base[type] = new BigNumber(0);
+            return (_base = column['values'])[type] != null ? _base[type] : _base[type] = new BigNumber(0);
           });
         });
         return Lazy(valueTypes).each(function(type) {
