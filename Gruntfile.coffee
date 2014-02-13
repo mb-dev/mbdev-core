@@ -58,7 +58,7 @@ module.exports = (grunt) ->
             'vendor/js/angular-filesystem.js'
             'bower_components/angular-ui-select2/src/select2.js'
             'bower_components/checklist-model/checklist-model.js'
-            'bower_components/ngStorage/src/angularLocalStorage.js'
+            'bower_components/ngStorage/ngStorage.js'
             'bower_components/pickadate/lib/picker.js'
             'bower_components/pickadate/lib/picker.date.js'
             'bower_components/pickadate/lib/picker.time.js'
