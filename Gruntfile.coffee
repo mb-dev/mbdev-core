@@ -33,18 +33,17 @@ module.exports = (grunt) ->
     less:
       dev:
         files: [
-          src: ["app/assets/css/app.less"]
-          dest: "public/css/app.css"
+          {src: ["app/assets/css/app.less"], dest: "public/css/app.css", nonull: true}
         ]
 
     concat:
       scripts:
-        files: 
-          "dist/js/vendor.js": [
+        files: [
+          {src: [
             'bower_components/jquery/jquery.min.js',
             'bower_components/select2/select2.js',
             'bower_components/bootstrap/dist/js/bootstrap.js',
-            'bower_components/momentjs/moment.js',
+            'bower_components/moment/moment.js',
             'bower_components/bignumber.js/bignumber.js',
             'bower_components/lazy.js/lazy.js',
             'bower_components/typeahead.js/dist/typeahead.js'
@@ -60,12 +59,13 @@ module.exports = (grunt) ->
             'bower_components/angular-ui-select2/src/select2.js'
             'bower_components/checklist-model/checklist-model.js'
             'bower_components/ngStorage/src/angularLocalStorage.js'
-            'bower_components/pickadate/lib/angular/picker.js'
-            'bower_components/pickadate/lib/angular/picker.date.js'
-            'bower_components/pickadate/lib/angular/picker.time.js'
+            'bower_components/pickadate/lib/picker.js'
+            'bower_components/pickadate/lib/picker.date.js'
+            'bower_components/pickadate/lib/picker.time.js'
             'bower_components/csv/lib/csv.js'
             'bower_components/selectize/dist/js/standalone/selectize.js'
-          ]
+          ], dest: "dist/js/vendor.js", nonull: true}
+        ]
       css:
         files: 
           "dist/css/vendor.css": [
