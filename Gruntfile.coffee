@@ -4,7 +4,7 @@ module.exports = (grunt) ->
   grunt.initConfig
     pkg: grunt.file.readJSON("package.json")
     coffee:
-      options: {}
+      options: {bare:true}
       files: 
         expand: true
         flatten: true

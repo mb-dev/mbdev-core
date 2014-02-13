@@ -26,7 +26,7 @@ angular.module('app.services')
     }
 
 
-angular.module('app.directives', ['app.services', 'app.filters'])
+angular.module('app.directives')
   .directive 'currencyWithSign', ($filter) ->
     {
       restrict: 'E',
@@ -179,7 +179,7 @@ angular.module('app.directives', ['app.services', 'app.filters'])
             searchField: 'name'
           })
 
- angular.module('app.filters', [])
+ angular.module('app.filters')
   .filter 'localDate', ($filter) ->
     angularDateFilter = $filter('date')
     (theDate) ->
