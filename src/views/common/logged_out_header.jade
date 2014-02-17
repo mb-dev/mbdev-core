@@ -1,10 +1,21 @@
 nav.navbar-default(role='navigation')
   .navbar-header
     button.navbar-toggle(type='button', data-toggle='collapse', data-target='.navbar-collapse')
-    a.navbar-brand(href='/') FinanceNg
+      span.sr-only Toggle navigation
+      span.icon-bar
+      span.icon-bar
+      span.icon-bar
+    a.navbar-brand(href='/') {{appName}}  
   .collapse.navbar-collapse
-    ul.nav.navbar-nav
-
+    ul.nav.navbar-nav.navbar-right
+      li
+        a(href='/login') 
+          i.fa.fa-sign-in.fa-fw.fa-sr
+          | Login
+      li
+        a(href='/register') 
+          i.fa.fa-edit.fa-fw.fa-sr
+          | Register
 div.alert.alert-success(ng-if="successMsg && successMsg.length > 0")
   span.fa-stack.fa-lg
     i.fa.fa-circle.fa-stack-2x
