@@ -337,13 +337,11 @@ class window.SimpleCollection
       @actionsLog = []
 
 class window.Database
-  constructor: (appName, $http, $q, $sessionStorage, $localStorage, fileSystem) ->
-    @$http = $http
+  constructor: (appName, $q, storageService, userService) ->
     @$q = $q
-    @$sessionStorage = $sessionStorage
-    @$localStorage = $localStorage
+    @storageService = storageService
     @appName = appName
-    @fileSystem = fileSystem
+    @userService = userService
 
     @db = {
       user: {config: {incomeCategories: ['Income:Salary', 'Income:Dividend', 'Income:Misc']}} 
@@ -362,14 +360,14 @@ class window.Database
 
   readTablesFromFS: (tableNames) =>
     promises = tableNames.map (tableName) => 
-      @fileSystem.readFile('/db/' + @fileName(@db.user.id, tableName)).then (content) ->
+      @storageService.readFile(@fileName(@db.user.id, tableName)).then (content) ->
         {name: tableName, content: JSON.parse(content)}
 
     @$q.all(promises)
 
   writeTablesToFS: (tableNames) =>
     promises = tableNames.map (tableName) =>
-      @fileSystem.writeText('/db/' + @fileName(@db.user.id, tableName), angular.toJson(@collectionToStorage(tableName))).then () ->
+      @storageService.writeFile(@fileName(@db.user.id, tableName), angular.toJson(@collectionToStorage(tableName))).then () ->
         console.log('write', tableName, 'to FS')
       , (err) ->
         console.log('failed to write', tableName, 'to FS', err)
@@ -397,12 +395,11 @@ class window.Database
   authenticate: =>
     defer = @$q.defer()
 
-    @$http.get('/data/authenticate')
-      .success (response, status, headers) =>
-        @$localStorage.user = response.user
-        defer.resolve()
-      .error (data, status, headers) ->
-        defer.reject({data: data, status: status, headers: headers})
+    @userService.checkLogin().then (response) ->
+      @storageService.setUserDetails(response.data.user)
+      defer.resolve()
+    , (response) ->
+      defer.reject({data: response.data, status: response.status, headers: response.headers})
 
     defer.promise
 
@@ -430,13 +427,13 @@ class window.Database
       else
         getDataFrom = dbModel.updatedAt
 
-      promise = @$http.get("/data/#{@appName}/#{tableName}?" + $.param({updatedAt: getDataFrom})).then (response) =>
+      promise = @userService.readData(@appName, tableName, getDataFrom).then (response) =>
         try
           dbModel.actionsLog = []
           response.data.actions.forEach (op) =>
             if op.action == 'update'
               try
-                dbModel.$updateOrSet(JSON.parse(sjcl.decrypt(@$localStorage["#{@db.user.id}-encryptionKey"], op.item)), op.updatedAt)
+                dbModel.$updateOrSet(JSON.parse(sjcl.decrypt(@storageService.getEncryptionKey(), op.item)), op.updatedAt)
               catch
                 console.log 'failed to decrypt', tableName, op
                 throw 'failed to decrypt'
@@ -461,10 +458,10 @@ class window.Database
     loadedDataFromFS = false
 
     copyUserDataFromSession = =>
-      @db.user = angular.extend(@db.user, angular.copy(@$localStorage.user))
+      @db.user = angular.extend(@db.user, angular.copy(@storageService.getUserDetails()))
 
     onAuthenticated = =>
-      if !@$localStorage["#{@db.user.id}-encryptionKey"]
+      if !@storageService.getEncryptionKey()
         deferred.reject({data: {reason: 'missing_key'}, status: 403})
       else
         copyUserDataFromSession()
@@ -514,7 +511,7 @@ class window.Database
       @authenticate().then(onAuthenticated, onFailedAuthenticate)
     else
       copyUserDataFromSession() 
-      if !@$localStorage["#{@db.user.id}-encryptionKey"]
+      if !@storageService.getEncryptionKey()
         deferred.reject({data: {reason: 'missing_key'}, status: 403})
       else if options.initialState == 'readFromWeb'
         @readTablesFromWeb(tableList, options.forceRefreshAll).then(onReadTablesFromWeb, onFailedReadTablesFromWeb)
@@ -528,9 +525,9 @@ class window.Database
 
   getTables: (tableList, forceRefreshAll = false) ->
     # actual getTables code start shere
-    if @$localStorage.user && forceRefreshAll
+    if @storageService.isUserExists() && forceRefreshAll
       @performGet(tableList, {initialState: 'readFromWeb', forceRefreshAll: true})
-    else if @$localStorage.user && !forceRefreshAll
+    else if @storageService.isUserExists() && !forceRefreshAll
       @performGet(tableList, {initialState: 'readFromFS', forceRefreshAll: false})  
     else
       @performGet(tableList, {initialState: 'authenticate', forceRefreshAll: false})  
@@ -545,17 +542,17 @@ class window.Database
       actions = []
       if forceServerCleanAndSaveAll
         dbModel.collection.forEach (item) =>
-          actions.push({action: 'insert', id: item.id, item: sjcl.encrypt(@$localStorage["#{@db.user.id}-encryptionKey"], angular.toJson(item))})
+          actions.push({action: 'insert', id: item.id, item: sjcl.encrypt(@storageService.getEncryptionKey(), angular.toJson(item))})
       else
         actions = dbModel.actionsLog
         actions.forEach (action) =>
           if action.item
-            action.item = sjcl.encrypt(@$localStorage["#{@db.user.id}-encryptionKey"], angular.toJson(action.item))
+            action.item = sjcl.encrypt(@storageService.getEncryptionKey(), angular.toJson(action.item))
 
-      promise = @$http.post("/data/#{@appName}/#{tableName}?all=#{!!forceServerCleanAndSaveAll}", actions).then (response) =>
+      promise = @userService.writeData(@appName, tableName, actions, forceServerCleanAndSaveAll).then (response) =>
         dbModel.updatedAt = response.data.updatedAt
         @db.user.lastModifiedDate["#{@appName}-#{tableName}"] = dbModel.updatedAt
-        @$localStorage.user.lastModifiedDate["#{@appName}-#{tableName}"] = dbModel.updatedAt
+        @storageService.setLastModifiedDate(@appName, tableName, dbModel.updatedAt)
         dbModel.actionsLog = []
 
       promises.push(promise)

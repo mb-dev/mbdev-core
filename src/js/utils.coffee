@@ -17,12 +17,24 @@ angular.module('app.services')
         shouldAuthenticate
       getUserDetails: ->
         $localStorage.user
+      isUserExists: ->
+        !!$localStorage.user
       setUserDetails: (userDetails) ->
         $localStorage.user = userDetails
+      setLastModifiedDate: (appName, tableName, updatedAt) ->
+        $localStorage.user.lastModifiedDate["#{appName}-#{tableName}"] = updatedAt
       getEncryptionKey: ->
         $localStorage["#{$localStorage.user.id}-encryptionKey"]
       setEncryptionKey: (encryptionKey) ->
         $localStorage["#{$localStorage.user.id}-encryptionKey"] = encryptionKey
+      getToken: ->
+        $localStorage["auth-token"]
+      setToken: (token) ->
+        $localStorage["auth-token"] = token
+      readFile: (fileName) ->
+        fileSystem.readFile('/db/' + fileName)
+      writeFile: (fileName, content) ->
+        fileSystem.writeText('/db/' + fileName, content)
     }
 
 

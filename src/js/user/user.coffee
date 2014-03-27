@@ -15,7 +15,7 @@ angular.module('app.controllers')
     $scope.user = {}
 
     $scope.loginOauth = (provider) ->
-      $window.location.href = '/auth/' + provider;
+      $window.location.href = userService.oauthUrl()
 
     $scope.register = ->
       userService.register($scope.user).then (successResponse) ->
@@ -34,16 +34,17 @@ angular.module('app.controllers')
       , (failedResponse) ->
         $scope.error = "Failed to login: " + failedResponse.data.message      
 
-  .controller 'LoginOAuthSuccessController', ($scope, $window, userService, storageService, $location) ->
+  .controller 'LoginOAuthSuccessController', ($scope, $window, userService, storageService, $location, $routeParams) ->
+    storageService.setToken($routeParams.token)
     userService.checkLogin().then (successResponse) ->
       response = successResponse.data
       storageService.setUserDetails(response.user)
       if storageService.getEncryptionKey()
-        $location.path('/welcome')
+        $location.url($location.path('/welcome'))
       else
-        $location.path('/key')
+        $location.url($location.path('/key'))
     , (failedResponse) ->
-        $location.path '/login'
+        $location.url($location.path '/login')
 
   .controller 'UserKeyController', ($scope, $window, storageService, $location, fileSystem, $q) ->
     setupFSState = setupFilesystem($q, fileSystem)
@@ -97,12 +98,24 @@ angular.module('app.controllers')
       $location.path('/login')
 
 angular.module('app.services')
-  .factory 'userService', ($http, $localStorage) ->
-    checkLogin: (user) ->
-      $http.get('/auth/check_login')
-    register: (user) ->
-      $http.post('/auth/register', user)
-    login: (user) ->
-      $http.post('/auth/login', user)
-    logout: ->
-      $http.post('/auth/logout')
+  .factory 'userService', ($http, storageService, $location) ->
+    if $location.host() == 'localhost'
+      apiServerUrl = 'http://localhost:10000'
+    {
+      oauthUrl: ->
+        apiServerUrl + '/auth/google'
+      authenticate: ->
+        $http.get(apiServerUrl + '/data/authenticate', {headers: {'Authorization': storageService.getToken() }})
+      readData: (appName, tableName, readDataFrom) ->
+        $http.get(apiServerUrl + "/data/#{appName}/#{tableName}?" + $.param({updatedAt: readDataFrom}), {headers: {'Authorization': storageService.getToken() }})
+      writeData: (appName, tableName, actions, forceServerCleanAndSaveAll = false) ->
+        $http.post("/data/#{appName}/#{tableName}?all=#{!!forceServerCleanAndSaveAll}", actions, {headers: {'Authorization': storageService.getToken() }})
+      checkLogin: ->
+        $http.get(apiServerUrl + '/auth/check_login', {headers: {'Authorization': storageService.getToken() }})
+      register: (user) ->
+        $http.post(apiServerUrl + '/auth/register', user)
+      login: (user) ->
+        $http.post(apiServerUrl + '/auth/login', user)
+      logout: ->
+        $http.post(apiServerUrl + '/auth/logout')
+      }
