@@ -27,10 +27,11 @@ angular.module('app.controllers')
     userService.checkLogin().then (successResponse) ->
       response = successResponse.data
       storageService.setUserDetails(response.user)
+      delete $location.$$search.token;
       if storageService.getEncryptionKey()
-        $location.url($location.path('/welcome'))
+        $location.path('/welcome')
       else
-        $location.url($location.path('/key'))
+        $location.path('/key')
     , (failedResponse) ->
         $location.url($location.path '/login')
 
