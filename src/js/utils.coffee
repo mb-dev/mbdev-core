@@ -4,37 +4,90 @@ angular.module('app.services')
       (reason) ->
         $scope.error = "failure for reason: " + reason
 
-  .factory 'storageService', ($sessionStorage, $localStorage, fileSystem) ->
+  .factory 'storageService', ($q) ->
+    appDetails = {}
     {
       isAuthenticateTimeAndSet: ->
         shouldAuthenticate = false
-        if !$localStorage.lastAuthenticateTime || moment().diff(moment($localStorage.lastAuthenticateTime), 'hours') > 1
+        if !amplify.store('lastAuthenticateTime') || moment().diff(moment(amplify.store('lastAuthenticateTime')), 'hours') > 1
           shouldAuthenticate = true
 
         if shouldAuthenticate
-          $localStorage.lastAuthenticateTime = moment().toISOString()
+          amplify.store('lastAuthenticateTime', moment().toISOString())
 
         shouldAuthenticate
       getUserDetails: ->
-        $localStorage.user
+        amplify.store('user')
+      setAppName: (appName, appDomain) ->
+        appDetails = {appName: appName, appDomain: appDomain}
+        amplify.store('appDetails', appDetails)
       isUserExists: ->
-        !!$localStorage.user
+        !!amplify.store('user')
       setUserDetails: (userDetails) ->
-        $localStorage.user = userDetails
+        amplify.store('user', userDetails)
       setLastModifiedDate: (appName, tableName, updatedAt) ->
-        $localStorage.user.lastModifiedDate["#{appName}-#{tableName}"] = updatedAt
+        amplify.store('user').lastModifiedDate["#{appName}-#{tableName}"] = updatedAt
       getEncryptionKey: ->
-        $localStorage["#{$localStorage.user.id}-encryptionKey"]
+        userId = amplify.store('user').id
+        return null if !userId
+        amplify.store("#{userId}-encryptionKey")
       setEncryptionKey: (encryptionKey) ->
-        $localStorage["#{$localStorage.user.id}-encryptionKey"] = encryptionKey
+        userId = amplify.store('user').id
+        return if !userId
+        amplify.store("#{userId}-encryptionKey", encryptionKey)
+      onLogout: ->
+        userId = amplify.store('user').id
+        return if !userId
+        amplify.store("#{userId}-encryptionKey", null)
+        amplify.store('user', null)
       getToken: ->
-        $localStorage["auth-token"]
+        amplify.store("auth-token")
       setToken: (token) ->
-        $localStorage["auth-token"] = token
+        amplify.store("auth-token", token)
+      getSuccessMsg: ->
+        amplify.store.sessionStorage('successMsg')
+      setSuccessMsg: (msg) ->
+        amplify.store.sessionStorage('successMsg', msg)
+      getNoticeMsg: ->
+        amplify.store.sessionStorage('noticeMsg')
+      setNoticeMsg: (msg) ->
+        amplify.store.sessionStorage('noticeMsg', msg)
+      clearMsgs: ->
+        amplify.store.sessionStorage('successMsg', null)
+        amplify.store.sessionStorage('noticeMsg', null)
+
       readFile: (fileName) ->
-        fileSystem.readFile('/db/' + fileName)
+        defer = $q.defer()
+        @setupFilesystem().then (config) ->
+          config.filer.open '/db/ ' + fileName, (file) ->
+            reader = new FileReader();
+            reader.onload = (e) ->
+              defer.resolve(reader.result)
+            read.readAsArrayBuffer(file)
+          , (err) ->
+            defer.reject(err)
+        defer.promise
       writeFile: (fileName, content) ->
-        fileSystem.writeText('/db/' + fileName, content)
+        defer = $q.defer()
+        @setupFilesystem().then (config) ->
+          config.filer.write '/db/' + fileName, {data: content, type: 'text/plain'}, (fileEntry, fileWriter) ->
+            defer.resolve(config)
+          , (err) ->
+            defer.reject(err)
+        , (err) ->
+          defer.reject(err)
+        defer.promise
+      setupFilesystem: ->
+        defer = $q.defer()
+        filer = new Filer();
+        filer.init {size: 1024 * 1024 * 50}, (fs) ->
+          filer.mkdir '/db', false, (dirEntry) ->
+            defer.resolve({fs: fs, filer: filer})
+          , (err) ->
+            defer.reject(err)  
+        , (err) -> 
+          defer.reject(err)
+        defer.promise
     }
 
 

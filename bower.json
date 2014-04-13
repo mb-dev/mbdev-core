@@ -30,7 +30,9 @@
     "lazy.js": "~0.3.2",
     "angular-moment": "~0.6.1",
     "checklist-model": "~0.1.1",
-    "font-awesome": "~4.0.3"
+    "font-awesome": "~4.0.3",
+    "filer.js": "https://github.com/SamyPesse/filer.js.git#patch-1",
+    "amplify": "~1.1.2"
   },
   "license": "MIT",
   "private": true,

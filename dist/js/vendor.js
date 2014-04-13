@@ -19389,299 +19389,862 @@ angular.module('siyfion.sfTypeahead', [])
   });
 
 
-var fileSystem = angular.module('fileSystem',[]);
+/** 
+ * Copyright 2013 - Eric Bidelman
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ 
+ * @fileoverview
+ * Convenient wrapper library for the HTML5 Filesystem API, implementing
+ * familiar UNIX commands (cp, mv, ls) for its API.
+ * 
+ * @author Eric Bidelman (ebidel@gmail.com)
+ * @version: 0.4.3
+ */
 
-fileSystem.factory('fileSystem', ['$q', '$timeout', function($q, $timeout) {
-  var fsDefer = $q.defer();
-  
-  var DEFAULT_QUOTA_MB = 0;
-  
-  //wrap resolve/reject in an empty $timeout so it happens within the Angular call stack
-  //easier than .apply() since no scope is needed and doesn't error if already within an apply
-  function safeResolve(deferral, message) {
-    $timeout(function() {
-      deferral.resolve(message);
-    });
-  }
-  function safeReject(deferral, message) {
-    $timeout(function() {
-      deferral.reject(message);
-    });
-  }
+'use strict';
 
-  navigator.webkitPersistentStorage.requestQuota(DEFAULT_QUOTA_MB*1024*1024, function(grantedBytes) {
-    window.webkitRequestFileSystem(window.PERSISTENT, grantedBytes, function(fs) {
-      safeResolve(fsDefer, fs);
-    }, function(e){
-      safeReject(fsDefer, {text: "Error requesting File System access", obj: e});
-    });
-  }, function(e) {
-    safeReject(fsDefer, {text: "Error requesting Quota", obj: e});
-  });
-  
-  var fileSystem = {
-    getCurrentUsage: function() {
-      var def = $q.defer();
-      
-      webkitStorageInfo.queryUsageAndQuota(window.PERSISTENT, function(used, quota) {
-        safeResolve(def, {'used': used, 'quota': quota});
-      }, function(e) {
-        safeReject(def, {text: "Error getting quota information", obj: e});
-      });
-      
-      return def.promise;
-    },
-    requestQuotaIncrease: function(newQuotaMB) {
-      var def = $q.defer();
-      
-      navigator.webkitPersistentStorage.requestQuota(newQuotaMB*1024*1024, function(grantedBytes) {
-        safeResolve(def, grantedBytes);
-      }, function(e) {
-        safeReject(def, {text: "Error requesting quota increase", obj: e});
-      });
-      
-      return def.promise;
-    },
-    getFolderContents: function(dir) {
-      var def = $q.defer();
-      
-      fsDefer.promise.then(function(fs) {
-        fs.root.getDirectory(fs.root.fullPath + dir, {}, function(dirEntry) {
-          var dirReader = dirEntry.createReader();
-          dirReader.readEntries(function(entries) {
-            safeResolve(def, entries);
-          }, function(e) {
-            safeReject(def, {text: "Error reading entries", obj: e});
-          });
-        }, function(e) {
-          safeReject(def, {text: "Error getting directory", obj: e});
-        });
-      }, function(err) {
-        def.reject(err);
-      });
-      
-      return def.promise;
-    },
-    createFolder: function(path) {
-      //remove leading slash if present
-      path = path.replace(/^\//, "");
-      
-      var def = $q.defer();
-      
-      function createDir(rootDir, folders) {
-        rootDir.getDirectory(folders[0], {create: true}, function(dirEntry) {
-          if (folders.length) {
-            createDir(dirEntry, folders.slice(1));
-          } else {
-            safeResolve(def, dirEntry);
-          }
-        }, function(e) {
-          safeReject(def, {text: "Error creating directory", obj: e});
-        });
+var self = this; // window or worker context.
+
+self.URL = self.URL || self.webkitURL;
+self.requestFileSystem = self.requestFileSystem || self.webkitRequestFileSystem;
+self.resolveLocalFileSystemURL = self.resolveLocalFileSystemURL ||
+                                 self.webkitResolveLocalFileSystemURL;
+navigator.temporaryStorage = navigator.temporaryStorage ||
+                             navigator.webkitTemporaryStorage;
+navigator.persistentStorage = navigator.persistentStorage ||
+                              navigator.webkitPersistentStorage;
+self.BlobBuilder = self.BlobBuilder || self.MozBlobBuilder ||
+                   self.WebKitBlobBuilder;
+
+// Prevent errors in browsers that don't support FileError.
+if (self.FileError === undefined) {
+  var FileError = function() {};
+  FileError.prototype.prototype = Error.prototype;
+}
+
+var Util = {
+
+  /**
+   * Turns a NodeList into an array.
+   *
+   * @param {NodeList} list The array-like object.
+   * @return {Array} The NodeList as an array.
+   */
+  toArray: function(list) {
+    return Array.prototype.slice.call(list || [], 0);
+  },
+
+  /*toDataURL: function(contentType, uint8Array) {
+    return 'data:' + contentType + ';base64,' +
+        self.btoa(this.arrayToBinaryString(uint8Array));
+  },*/
+
+  /**
+   * Creates a data: URL from string data.
+   *
+   * @param {string} str The content to encode the data: URL from.
+   * @param {string} contentType The mimetype of the data str represents.
+   * @param {bool=} opt_isBinary Whether the string data is a binary string
+   *     (and therefore should be base64 encoded). True by default.
+   * @return {string} The created data: URL.
+   */
+  strToDataURL: function(str, contentType, opt_isBinary) {
+    var isBinary = opt_isBinary != undefined ? opt_isBinary : true;
+    if (isBinary) {
+      return 'data:' + contentType + ';base64,' + self.btoa(str);
+    } else {
+      return 'data:' + contentType + ',' + str;
+    }
+  },
+
+  /**
+   * Creates a blob: URL from a binary str.
+   *
+   * @param {string} binStr The content as a binary string.
+   * @param {string=} opt_contentType An optional mimetype of the data.
+   * @return {string} A new blob: URL.
+   */
+  strToObjectURL: function(binStr, opt_contentType) {
+
+    var ui8a = new Uint8Array(binStr.length);
+    for (var i = 0; i < ui8a.length; ++i) { 
+      ui8a[i] = binStr.charCodeAt(i);
+    }
+
+    var blob = new Blob([ui8a],
+                        opt_contentType ? {type: opt_contentType} : {});
+
+    return self.URL.createObjectURL(blob);
+  },
+
+  /**
+   * Creates a blob: URL from a File or Blob object.
+   *
+   * @param {Blob|File} blob The File or Blob data.
+   * @return {string} A new blob: URL.
+   */
+  fileToObjectURL: function(blob) {
+    return self.URL.createObjectURL(blob);
+  },
+
+  /**
+   * Reads a File or Blob object and returns it as an ArrayBuffer.
+   *
+   * @param {Blob|File} blob The File or Blob data.
+   * @param {Function} callback Success callback passed the array buffer.
+   * @param {Function=} opt_error Optional error callback if the read fails.
+   */
+  fileToArrayBuffer: function(blob, callback, opt_errorCallback) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      callback(e.target.result);
+    };
+    reader.onerror = function(e) {
+      if (opt_errorCallback) {
+        opt_errorCallback(e);
       }
-      
-      fsDefer.promise.then(function(fs) {
-        createDir(fs.root, path.split('/'));
-      }, function(err) {
-        def.reject(err);
-      });
-      
-      return def.promise;
-    },
-    deleteFolder: function(path, recursive) {
-      recursive = (typeof recursive == 'undefined' ? false : recursive);
-      
-      var def = $q.defer();
-      
-      fsDefer.promise.then(function(fs) {
-        fs.root.getDirectory(path, {}, function(dirEntry) {
-          var success = function() {
-            safeResolve(def, "");
-          };
-          var err = function(e) {
-            safeReject(def, {text: "Error removing directory", obj: e});
-          };
-          
-          if(recursive) {
-            dirEntry.removeRecursively(success, err);
+    };
+
+    reader.readAsArrayBuffer(blob);
+  },
+
+  /**
+   * Creates and returns a blob from a data URL (either base64 encoded or not).
+   *
+   * @param {string} dataURL The data URL to convert.
+   * @return {Blob} A blob representing the array buffer data.
+   */
+  dataURLToBlob: function(dataURL) {
+    var BASE64_MARKER = ';base64,';
+    if (dataURL.indexOf(BASE64_MARKER) == -1) {
+      var parts = dataURL.split(',');
+      var contentType = parts[0].split(':')[1];
+      var raw = parts[1];
+
+      return new Blob([raw], {type: contentType});
+    }
+
+    var parts = dataURL.split(BASE64_MARKER);
+    var contentType = parts[0].split(':')[1];
+    var raw = window.atob(parts[1]);
+    var rawLength = raw.length;
+
+    var uInt8Array = new Uint8Array(rawLength);
+
+    for (var i = 0; i < rawLength; ++i) {
+      uInt8Array[i] = raw.charCodeAt(i);
+    }
+
+    return new Blob([uInt8Array], {type: contentType});
+  },
+
+  /**
+   * Reads an ArrayBuffer as returns its contents as a binary string.
+   *
+   * @param {ArrayBuffer} buffer The buffer of data.
+   * @param {string=} opt_contentType An optional mimetype of the data.
+   * @return {Blob} A blob representing the array buffer data.
+   */
+  arrayBufferToBlob: function(buffer, opt_contentType) {
+    var uInt8Array = new Uint8Array(buffer);
+    return new Blob([uInt8Array],
+                    opt_contentType ? {type: opt_contentType} : {});
+  },
+
+  /**
+   * Reads an ArrayBuffer as returns its contents as a binary string.
+   *
+   * @param {ArrayBuffer} buffer The buffer of data.
+   * @param {Function} callback Success callback passed the binary string.
+   * @param {Function=} opt_error Optional error callback if the read fails.
+   */
+  arrayBufferToBinaryString: function(buffer, callback, opt_errorCallback) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      callback(e.target.result);
+    };
+    reader.onerror = function(e) {
+      if (opt_errorCallback) {
+        opt_errorCallback(e);
+      }
+    };
+
+    var uInt8Array = new Uint8Array(buffer);
+    reader.readAsBinaryString(new Blob([uInt8Array]));
+  },
+
+  /**
+   * Create a binary string out of an array of numbers (bytes), each varying
+   * from 0-255.
+   *
+   * @param {Array} bytes The array of numbers to transform into a binary str.
+   * @return {string} The byte array as a string.
+   */
+  arrayToBinaryString: function(bytes) {
+    if (typeof bytes != typeof []) {
+      return null;
+    }
+    var i = bytes.length;
+    var bstr = new Array(i);
+    while (i--) {
+      bstr[i] = String.fromCharCode(bytes[i]);
+    }
+    return bstr.join('');
+  },
+
+  /**
+   * Returns the file extension for a given filename.
+   *
+   * @param {string} filename The filename.
+   * @return {string} The file's extension.
+   */
+  getFileExtension: function(filename) {
+    var idx = filename.lastIndexOf('.');
+    return idx != -1 ? filename.substring(idx) : '';
+  }
+};
+
+
+var MyFileError = function(obj) {
+  this.prototype = FileError.prototype;
+  this.code = obj.code;
+  this.name = obj.name;
+};
+//MyFileError.prototype.__proto__ = FileError.prototype;
+
+// Extend FileError with custom errors and a convenience method to get error
+// code mnemonic.
+FileError.BROWSER_NOT_SUPPORTED = 1000;
+
+// TODO: remove when FileError.name is implemented (crbug.com/86014).
+FileError.prototype.__defineGetter__('name', function() {
+  var keys = Object.keys(FileError);
+  for (var i = 0, key; key = keys[i]; ++i) {
+    if (FileError[key] == this.code) {
+      return key;
+    }
+  }
+  return 'Unknown Error';
+});
+
+
+var Filer = new function() {
+
+  var FS_INIT_ERROR_MSG = 'Filesystem has not been initialized.';
+  var NOT_IMPLEMENTED_MSG = 'Not implemented.';
+  var NOT_A_DIRECTORY = 'Path was not a directory.';
+  var INCORRECT_ARGS = 'These method arguments are not supported.';
+  var FS_URL_SCHEME = 'filesystem:';
+  var DEFAULT_FS_SIZE = 1024 * 1024; // 1MB.
+
+  var fs_ = null;
+  var cwd_ = null;
+  var isOpen_ = false;
+
+  var isFsURL_ = function(path) {
+    return path.indexOf(FS_URL_SCHEME) == 0;
+  };
+
+  // Path can be relative or absolute. If relative, it's taken from the cwd_.
+  // If a filesystem URL is passed it, it is simple returned
+  var pathToFsURL_ = function(path) {
+    if (!isFsURL_(path)) {
+      if (path[0] == '/') {
+        path = fs_.root.toURL() + path.substring(1);
+      } else if (path.indexOf('./') == 0 || path.indexOf('../') == 0) {
+        if (path == '../' && cwd_ != fs_.root) {
+          path = cwd_.toURL() + '/' + path;
+        } else {
+          path = cwd_.toURL() + path;
+        }
+      } else {
+        path = cwd_.toURL() + '/' + path;
+      }
+    }
+
+    return path;
+  };
+
+  /**
+   * Looks up a FileEntry or DirectoryEntry for a given path.
+   *
+   * @param {function(...FileEntry|DirectorEntry)} callback A callback to be
+   *     passed the entry/entries that were fetched. The ordering of the
+   *     entries passed to the callback correspond to the same order passed
+   *     to this method.
+   * @param {...string} var_args 1-2 paths to lookup and return entries for.
+   *     These can be paths or filesystem: URLs.
+   */
+  var getEntry_ = function(callback, opt_errorHandler, var_args) {
+    var srcStr = arguments[2];
+    var destStr = arguments[3];
+
+    var errorHandler = opt_errorHandler || function(e) { throw e; };
+
+    var onError = function(e) {
+      var error;
+      if (e.code == FileError.NOT_FOUND_ERR) {
+        if (destStr) {
+          error = new Error('"' + srcStr + '" or "' + destStr +
+                          '" does not exist.');
+        } else {
+          error = new Error('"' + srcStr + '" does not exist.');
+        }
+      } else {
+        error = new Error('Problem getting Entry for one or more paths.');
+      }
+      error.code = e.code;
+      errorHandler(error);
+      return;
+    };
+
+    // Build a filesystem: URL manually if we need to.
+    var src = pathToFsURL_(srcStr);
+
+    if (arguments.length == 4) {
+      var dest = pathToFsURL_(destStr);
+      self.resolveLocalFileSystemURL(src, function(srcEntry) {
+        self.resolveLocalFileSystemURL(dest, function(destEntry) {
+          callback(srcEntry, destEntry);
+        }, onError);
+      }, onError);
+    } else {
+      self.resolveLocalFileSystemURL(src, callback, onError);
+    }
+  };
+
+  /**
+   * Copy or moves a file or directory to a destination.
+   *
+   * See public method's description (Filer.cp()) for rest of params.
+   * @param {Boolean=} opt_deleteOrig True if the original entry should be
+   *     deleted after the copy takes place, essentially making the operation
+   *     a move instead of a copy. Defaults to false.
+   */
+  var copyOrMove_ = function(src, dest, opt_newName, opt_successCallback,
+                             opt_errorHandler, opt_deleteOrig) {
+    var self = this;
+
+    if (!fs_) {
+      throw new Error(FS_INIT_ERROR_MSG);
+    }
+
+    if (typeof src != typeof dest) {
+      throw new Error(INCORRECT_ARGS);
+    }
+
+    var newName = opt_newName || null;
+    var deleteOrig = opt_deleteOrig != undefined ? opt_deleteOrig : false;
+
+    if ((src.isFile || dest.isDirectory) && dest.isDirectory) {
+      if (deleteOrig) {
+        src.moveTo(dest, newName, opt_successCallback, opt_errorHandler);
+      } else {
+        src.copyTo(dest, newName, opt_successCallback, opt_errorHandler);
+      }
+    } else {
+      getEntry_(function(srcEntry, destDir) {
+        if (!destDir.isDirectory) {
+          var e = new Error('Oops! "' + destDir.name + ' is not a directory!');
+          if (opt_errorHandler) {
+            opt_errorHandler(e);
           } else {
-            dirEntry.remove(success, err);
+            throw e;
           }
-        }, function(e) {
-          safeReject(def, {text: "Error getting directory", obj: e});
-        });
-      }, function(err) {
-        def.reject(err);
-      });
-      
-      return def.promise;
+          return;
+        }
+        if (deleteOrig) {
+          srcEntry.moveTo(destDir, newName, opt_successCallback, opt_errorHandler);
+        } else {
+          srcEntry.copyTo(destDir, newName, opt_successCallback, opt_errorHandler);
+        }
+      }, opt_errorHandler, src, dest);
+    }
+  }
+
+  function Filer(fs) {
+    fs_  = fs || null;
+    if (fs_) {
+      cwd_ = fs_.root;
+      isOpen_ = true; // TODO: this may not be the case.
+    }
+  }
+
+  Filer.DEFAULT_FS_SIZE = DEFAULT_FS_SIZE;
+  Filer.version = '0.4.3';
+
+  Filer.prototype = {
+    get fs() {
+      return fs_;
     },
-    writeFileInput: function(filename, file, mimeString) {
-      var def = $q.defer();
-      
-      var reader = new FileReader();
-      
-      reader.onload = function(e) {
-        var buf = e.target.result;
-        
-        $timeout(function() {
-          fileSystem.writeArrayBuffer(filename, buf, mimeString).then(function() {
-            safeResolve(def, "");
-          }, function(e) {
-            safeReject(def, e);
-          });
-        });
+    get isOpen() {
+      return isOpen_;
+    },
+    get cwd() {
+      return cwd_;
+    }
+  }
+
+  /**
+   * Constructs and returns a filesystem: URL given a path.
+   *
+   * @param {string=} path The path to construct a URL for.
+   *     size {int=} The storage size (in bytes) to open the filesystem with.
+   *         Defaults to DEFAULT_FS_SIZE.
+   * @return {string} The filesystem: URL.
+   */
+  Filer.prototype.pathToFilesystemURL = function(path) {
+    return pathToFsURL_(path);
+  }
+
+  /**
+   * Initializes (opens) the file system.
+   *
+   * @param {object=} opt_initObj Optional object literal with the following
+   *     properties. Note: If {} or null is passed, default values are used.
+   *     persistent {Boolean=} Whether the browser should use persistent quota.
+   *         Default is false.
+   *     size {int=} The storage size (in bytes) to open the filesystem with.
+   *         Defaults to DEFAULT_FS_SIZE.
+   * @param {Function=} opt_successCallback Optional success handler passed a
+   *      DOMFileSystem object.
+   * @param {Function=} opt_errorHandler Optional error callback.
+   */
+  Filer.prototype.init = function(opt_initObj, opt_successCallback,
+                                  opt_errorHandler) {
+    if (!self.requestFileSystem) {
+      throw new MyFileError({
+        code: FileError.BROWSER_NOT_SUPPORTED,
+        name: 'BROWSER_NOT_SUPPORTED'
+      });
+    }
+
+    var initObj = opt_initObj ? opt_initObj : {}; // Use defaults if obj is null.
+
+    var size = initObj.size || DEFAULT_FS_SIZE;
+    this.type = self.TEMPORARY;
+    if ('persistent' in initObj && initObj.persistent) {
+      this.type = self.PERSISTENT;
+    }
+
+    var init = function(fs) {
+      this.size = size;
+      fs_ = fs;
+      cwd_ = fs_.root;
+      isOpen_ = true;
+
+      opt_successCallback && opt_successCallback(fs);
+    };
+
+    if (this.type == self.PERSISTENT && !!navigator.persistentStorage) {
+      navigator.persistentStorage.requestQuota(size, function(grantedBytes) {  
+        self.requestFileSystem(
+            this.type, grantedBytes, init.bind(this), opt_errorHandler);
+      }.bind(this), opt_errorHandler);
+    } else {
+      self.requestFileSystem(
+          this.type, size, init.bind(this), opt_errorHandler);
+    }
+  };
+
+  /**
+   * Reads the contents of a directory.
+   *
+   * @param {string|DirectoryEntry} dirEntryOrPath A path relative to the
+   *     current working directory. In most cases that is the root entry, unless
+   *     cd() has been called. A DirectoryEntry or filesystem URL can also be
+   *     passed, in which case, the folder's contents will be returned.
+   * @param {Function} successCallback Success handler passed an Array<Entry>.
+   * @param {Function=} opt_errorHandler Optional error callback.
+   */
+  Filer.prototype.ls = function(dirEntryOrPath, successCallback,
+                                opt_errorHandler) {
+    if (!fs_) {
+      throw new Error(FS_INIT_ERROR_MSG);
+    }
+
+    var callback = function(dirEntry) {
+
+      //cwd_ = dirEntry;
+
+      // Read contents of current working directory. According to spec, need to
+      // keep calling readEntries() until length of result array is 0. We're
+      // guarenteed the same entry won't be returned again.
+      var entries_ = [];
+      var reader = dirEntry.createReader();
+
+      var readEntries = function() {
+        reader.readEntries(function(results) {
+          if (!results.length) {
+            // By default, sort the list by name.
+            entries_.sort(function(a, b) {
+              return a.name < b.name ? -1 : b.name < a.name ? 1 : 0;
+            });
+            successCallback(entries_);
+          } else {
+            entries_ = entries_.concat(Util.toArray(results));
+            readEntries();
+          }
+        }, opt_errorHandler);
       };
-      
-      reader.readAsArrayBuffer(file);
-      
-      return def.promise;
-    },
-    writeText: function(fileName, contents, append) {
-      append = (typeof append == 'undefined' ? false : append);
-      
-      //create text blob from string
-      var blob = new Blob([contents], {type: 'text/plain'});
-      
-      return fileSystem.writeBlob(fileName, blob, append);
-    },
-    writeArrayBuffer: function(fileName, buf, mimeString, append) {
-      append = (typeof append == 'undefined' ? false : append);
-      
-      var blob = new Blob([new Uint8Array(buf)], {type: mimeString});
-      
-      return fileSystem.writeBlob(fileName, blob, append);
-    },
-    writeBlob: function(fileName, blob, append) {
-      append = (typeof append == 'undefined' ? false : append);
-      
-      var def = $q.defer();
-      
-      fsDefer.promise.then(function(fs) {
-        
-        fs.root.getFile(fileName, {create: true}, function(fileEntry) {
-          
-          fileEntry.createWriter(function(fileWriter) {
-            if(append) {
-              fileWriter.seek(fileWriter.length);
-            }
-            
-            var truncated = false;
-            fileWriter.onwriteend = function(e) {
-              //truncate all data after current position
-              if (!truncated) {
-                truncated = true;
-                this.truncate(this.position);
-                return;
-              }           
-              safeResolve(def, "");
-            };
-            
-            fileWriter.onerror = function(e) {
-              safeReject(def, {text: 'Write failed', obj: e});
-            };
-            
-            fileWriter.write(blob);
-            
-          }, function(e) {
-            safeReject(def, {text: "Error creating file", obj: e});
-          });
-          
-        }, function(e) {
-          safeReject(def, {text: "Error getting file", obj: e});
-        });
-      
-      }, function(err) {
-        def.reject(err);
-      });
-      
-      return def.promise;
-    },
-    getFile: function(fileName) {
-      var def = $q.defer();
 
-      fsDefer.promise.then(function(fs) {
-        fs.root.getFile(fileName, {}, function(fileEntry) {
-          // Get a File object representing the file,
-          fileEntry.file(function(file) {
-            safeResolve(def, file);
-          }, function(e) {
-            safeReject(def, {text: "Error creating file", obj: e});
-          });
-        });
-      }, function(err) {
-        def.reject(err);
-      });
+      readEntries();
+    };
 
-      return def.promise;
-    },
-    readFile: function(fileName, returnType) {
-      var def = $q.defer();
-      
-      returnType = returnType || "text";
-      
-      fsDefer.promise.then(function(fs) {
-        fs.root.getFile(fileName, {}, function(fileEntry) {
-          // Get a File object representing the file,
-          // then use FileReader to read its contents.
-          fileEntry.file(function(file) {
-            var reader = new FileReader();
-            
-            reader.onloadend = function() {
-              safeResolve(def, this.result);
-            };
-            
-            reader.onerror = function(e) {
-              safeReject(def, {text: "Error reading file", obj: e});
-            };
-            
-            
-            switch(returnType) {
-              case 'arraybuffer':
-                reader.readAsArrayBuffer(file);
-                break;
-              case 'binarystring':
-                reader.readAsBinaryString(file);
-                break;
-              case 'dataurl':
-                reader.readAsDataURL(file);
-                break;
-              default:
-                reader.readAsText(file);
+    if (dirEntryOrPath.isDirectory) { // passed a DirectoryEntry.
+      callback(dirEntryOrPath);
+    } else if (isFsURL_(dirEntryOrPath)) { // passed a filesystem URL.
+      getEntry_(callback, opt_errorHandler, pathToFsURL_(dirEntryOrPath));
+    } else { // Passed a path. Look up DirectoryEntry and proceeed.
+      // TODO: Find way to use getEntry_(callback, dirEntryOrPath); with cwd_.
+      cwd_.getDirectory(dirEntryOrPath, {}, callback, opt_errorHandler);
+    }
+  };
+
+  /**
+   * Creates a new directory.
+   *
+   * @param {string} path The name of the directory to create. If a path is
+   *     given, each intermediate dir is created (e.g. similar to mkdir -p).
+   * @param {bool=} opt_exclusive True if an error should be thrown if
+   *     one or more of the directories already exists. False by default.
+   * @param {Function} opt_successCallback Success handler passed the
+   *     DirectoryEntry that was created. If we were passed a path, the last
+   *     directory that was created is passed back.
+   * @param {Function=} opt_errorHandler Optional error callback.
+   */
+  Filer.prototype.mkdir = function(path, opt_exclusive, opt_successCallback,
+                                   opt_errorHandler) {
+    if (!fs_) {
+      throw new Error(FS_INIT_ERROR_MSG);
+    }
+
+    var exclusive = opt_exclusive != null ? opt_exclusive : false;
+
+    var folderParts = path.split('/');
+
+    var createDir = function(rootDir, folders) {
+      // Throw out './' or '/' and move on. Prevents: '/foo/.//bar'.
+      if (folders[0] == '.' || folders[0] == '') {
+        folders = folders.slice(1);
+      }
+      rootDir.getDirectory(folders[0], {create: true, exclusive: exclusive},
+        function (dirEntry) {
+          if (dirEntry.isDirectory) { // TODO: check shouldn't be necessary.
+            // Recursively add the new subfolder if we have more to create and
+            // There was more than one folder to create.
+            if (folders.length && folderParts.length != 1) {
+              createDir(dirEntry, folders.slice(1));
+            } else {
+              // Return the last directory that was created.
+              if (opt_successCallback) opt_successCallback(dirEntry);
             }
-          }, function(e) {
-            safeReject(def, {text: "Error getting file", obj: e});
-          });
-        }, function(e) {
-          safeReject(def, {text: "Error getting file", obj: e});
-        });
-      }, function(err) {
-        def.reject(err);
-      });
-      
-      return def.promise;
-    },
-    deleteFile: function(fullPath) {
-      var def = $q.defer();
-      
-      fsDefer.promise.then(function(fs) {
-        fs.root.getFile(fullPath, {create:false}, function(fileEntry) {
-          fileEntry.remove(function() {
-            safeResolve(def, "");
-          }, function(e) {
-            safeReject(def, {text: "Error deleting file", obj: e});
-          });
-        });
-      }, function(err) {
-        def.reject(err);
-      });
-      
-      return def.promise;
+          } else {
+            var e = new Error(path + ' is not a directory');
+            if (opt_errorHandler) {
+              opt_errorHandler(e);
+            } else {
+              throw e;
+            }
+          }
+        },
+        function(e) {
+          e.message = e.message || "'" + path + "' already exists";
+          if (opt_errorHandler) {
+            opt_errorHandler(e);
+          } else {
+            throw e;
+          }
+        }
+      );
+    };
+
+    createDir(cwd_, folderParts);
+  };
+
+  /**
+   * Looks up and return a File for a given file entry.
+   *
+   * @param {string|FileEntry} entryOrPath A path, filesystem URL, or FileEntry
+   *     of the file to lookup.
+   * @param {Function} successCallback Success callback passed the File object.
+   * @param {Function=} opt_errorHandler Optional error callback.
+   */
+  Filer.prototype.open = function(entryOrPath, successCallback, opt_errorHandler) {
+    if (!fs_) {
+      throw new Error(FS_INIT_ERROR_MSG);
+    }
+
+    if (entryOrPath.isFile) {
+      entryOrPath.file(successCallback, opt_errorHandler);
+    } else {
+      getEntry_(function(fileEntry) {
+        fileEntry.file(successCallback, opt_errorHandler);
+      }, opt_errorHandler, pathToFsURL_(entryOrPath));
+    }
+  };
+
+  /**
+   * Looks up a FileEntry or DirectoryEntry for a given path.
+   *
+   * @param {function(...FileEntry|DirectorEntry)} callback A callback to be
+   *     passed the entry/entries that were fetched. The ordering of the
+   *     entries passed to the callback correspond to the same order passed
+   *     to this method.
+   */
+  Filer.prototype.getEntry = function(path, successCallback, opt_errorHandler) {
+    if (!fs_) {
+      throw new Error(FS_INIT_ERROR_MSG);
+    }
+
+    getEntry_(successCallback, opt_errorHandler, pathToFsURL_(path));
+  };
+
+  /**
+   * Creates an empty file.
+   *
+   * @param {string} path The relative path of the file to create, from the
+   *     current working directory.
+   * @param {bool=} opt_exclusive True (default) if an error should be thrown if
+   *     the file already exists.
+   * @param {Function} successCallback A success callback, which is passed
+   *     the new FileEntry.
+   * @param {Function=} opt_errorHandler Optional error callback.
+   */
+  Filer.prototype.create = function(path, opt_exclusive, successCallback,
+                                    opt_errorHandler) {
+    if (!fs_) {
+      throw new Error(FS_INIT_ERROR_MSG);
+    }
+
+    var exclusive = opt_exclusive != null ? opt_exclusive : true;
+
+    cwd_.getFile(path, {create: true,  exclusive: exclusive}, successCallback,
+      function(e) {
+        if (e.code == FileError.INVALID_MODIFICATION_ERR) {
+          e.message = "'" + path + "' already exists";
+        }
+        if (opt_errorHandler) {
+          opt_errorHandler(e);
+        } else {
+          throw e;
+        }
+      }
+    );
+  };
+
+  /**
+    * Moves a file or directory.
+    *
+    * @param {string|FileEntry|DirectoryEntry} src The file/directory
+    *     to move. If src is a string, a path or filesystem: URL is accepted.
+    * @param {string|DirectoryEntry} dest The directory to move the src into.
+    *     If dest is a string, a path or filesystem: URL is accepted.
+    *     Note: dest needs to be the same type as src.
+    * @param {string=} opt_newName An optional new name for the moved entry.
+    * @param {Function=} opt_successCallback Optional callback passed the moved
+    *     entry on a successful move.
+    * @param {Function=} opt_errorHandler Optional error callback.
+    */
+  Filer.prototype.mv = function(src, dest, opt_newName, opt_successCallback,
+                                opt_errorHandler) {
+    copyOrMove_.bind(this, src, dest, opt_newName, opt_successCallback,
+                     opt_errorHandler, true)();
+  };
+
+  /**
+   * Deletes a file or directory entry.
+   *
+   * @param {string|FileEntry|DirectoryEntry} entryOrPath The file or directory
+   *     to remove. If entry is a DirectoryEntry, its contents are removed
+   *     recursively. If entryOrPath is a string, a path or filesystem: URL is
+   *     accepted.
+   * @param {Function} successCallback Zero arg callback invoked on
+   *     successful removal.
+   * @param {Function=} opt_errorHandler Optional error callback.
+   */
+  Filer.prototype.rm = function(entryOrPath, successCallback,
+                                opt_errorHandler) {
+    if (!fs_) {
+      throw new Error(FS_INIT_ERROR_MSG);
+    }
+
+    var removeIt = function(entry) {
+      if (entry.isFile) {
+        entry.remove(successCallback, opt_errorHandler);
+      } else if (entry.isDirectory) {
+        entry.removeRecursively(successCallback, opt_errorHandler);
+      }
+    };
+
+    if (entryOrPath.isFile || entryOrPath.isDirectory) {
+      removeIt(entryOrPath);
+    } else {
+      getEntry_(removeIt, opt_errorHandler, entryOrPath);
+    }
+  };
+
+  /**
+   * Changes the current working directory.
+   *
+   * @param {string|DirectoryEntry} dirEntryOrPath A DirectoryEntry to move into
+   *     or a path relative to the current working directory. A filesystem: URL
+   *     is also accepted
+   * @param {Function=} opt_successCallback Optional success callback, which is
+   *     passed the DirectoryEntry of the new current directory.
+   * @param {Function=} opt_errorHandler Optional error callback.
+   */
+  Filer.prototype.cd = function(dirEntryOrPath, opt_successCallback,
+                                opt_errorHandler) {
+    if (!fs_) {
+      throw new Error(FS_INIT_ERROR_MSG);
+    }
+
+    if (dirEntryOrPath.isDirectory) {
+      cwd_ = dirEntryOrPath;
+      opt_successCallback && opt_successCallback(cwd_);
+    } else {
+      // Build a filesystem: URL manually if we need to.
+      var dirEntryOrPath = pathToFsURL_(dirEntryOrPath);
+
+      getEntry_(function(dirEntry) {
+        if (dirEntry.isDirectory) {
+          cwd_ = dirEntry;
+          opt_successCallback && opt_successCallback(cwd_);
+        } else {
+          var e = new Error(NOT_A_DIRECTORY);
+          if (opt_errorHandler) {
+            opt_errorHandler(e);
+          } else {
+            throw e;
+          }
+        }
+      }, opt_errorHandler, dirEntryOrPath);
+    }
+  };
+
+  /**
+    * Copies a file or directory to a destination.
+    *
+    * @param {string|FileEntry|DirectoryEntry} src The file/directory
+    *     to copy. If src is a string, a path or filesystem: URL is accepted.
+    * @param {string|DirectoryEntry} dest The directory to copy the src into.
+    *     If dest is a string, a path or filesystem: URL is accepted.
+    *     Note: dest needs to be the same type as src.
+    * @param {string=} opt_newName An optional name for the copied entry.
+    * @param {Function=} opt_successCallback Optional callback passed the moved
+    *     entry on a successful copy.
+    * @param {Function=} opt_errorHandler Optional error callback.
+    */
+  Filer.prototype.cp = function(src, dest, opt_newName, opt_successCallback,
+                                opt_errorHandler) {
+    copyOrMove_.bind(this, src, dest, opt_newName, opt_successCallback,
+                     opt_errorHandler)();
+  };
+
+  /**
+   * Writes data to a file.
+   *
+   * If the file already exists, its contents are overwritten.
+   *
+   * @param {string|FileEntry} entryOrPath A path, filesystem URL, or FileEntry
+    *     of the file to lookup.
+   * @param {object} dataObj The data to write. Example:
+   *     {data: string|Blob|File|ArrayBuffer, type: mimetype, append: true}
+   *     If append is specified, data is appended to the end of the file.
+   * @param {Function} opt_successCallback Success callback, which is passed
+   *     the created FileEntry and FileWriter object used to write the data.
+   * @param {Function=} opt_errorHandler Optional error callback.
+   */
+  Filer.prototype.write = function(entryOrPath, dataObj, opt_successCallback,
+                                   opt_errorHandler) {
+    if (!fs_) {
+      throw new Error(FS_INIT_ERROR_MSG);
+    }
+
+    var writeFile_ = function(fileEntry) {
+      fileEntry.createWriter(function(fileWriter) {
+
+        fileWriter.onerror = opt_errorHandler;
+
+        if (dataObj.append) {
+          fileWriter.onwriteend = function(e) {
+            if (opt_successCallback) opt_successCallback(fileEntry, this);
+          };
+
+          fileWriter.seek(fileWriter.length); // Start write position at EOF.
+        } else {
+          var truncated = false;
+          fileWriter.onwriteend = function(e) {
+            // Truncate file to newly written file size.
+            if (!truncated) {
+              truncated = true;
+              this.truncate(this.position);
+              return;
+            }
+            if (opt_successCallback) opt_successCallback(fileEntry, this);
+          };
+        }
+
+        // Blob() takes ArrayBufferView, not ArrayBuffer.
+        if (dataObj.data.__proto__ == ArrayBuffer.prototype) {
+          dataObj.data = new Uint8Array(dataObj.data);
+        }
+        var blob = new Blob([dataObj.data],
+                            dataObj.type ? {type: dataObj.type} : {});
+
+        fileWriter.write(blob);
+
+      }, opt_errorHandler);
+    };
+
+    if (entryOrPath.isFile) {
+      writeFile_(entryOrPath);
+    } else if (isFsURL_(entryOrPath)) {
+      getEntry_(writeFile_, opt_errorHandler, entryOrPath);
+    } else {
+      cwd_.getFile(entryOrPath, {create: true, exclusive: false}, writeFile_,
+                   opt_errorHandler);
     }
   };
   
-  return fileSystem;
-}]);
+  /**
+   * Displays disk space usage.
+   *
+   * @param {Function} successCallback Success callback, which is passed
+   *     Used space, Free space and Currently allocated total space in bytes.
+   * @param {Function=} opt_errorHandler Optional error callback.
+   */
+  Filer.prototype.df = function(successCallback, opt_errorHandler) {
+    var queryCallback = function(byteUsed, byteCap) {
+      successCallback(byteUsed, byteCap - byteUsed, byteCap);
+    }
+    
+    if (!(navigator.temporaryStorage.queryUsageAndQuota && navigator.persistentStorage.queryUsageAndQuota)) {
+      throw new Error(NOT_IMPLEMENTED_MSG);
+    }
+
+    if (self.TEMPORARY == this.type) {
+      navigator.temporaryStorage.queryUsageAndQuota(queryCallback, opt_errorHandler);
+    } else if (self.PERSISTENT == this.type) {
+      navigator.persistentStorage.queryUsageAndQuota(queryCallback, opt_errorHandler);
+    }
+  };
+                                   
+  return Filer;
+};
+
 /**
  * Enhanced Select2 Dropmenus
  *
@@ -19995,109 +20558,836 @@ angular.module('checklist-model', [])
   };
 }]);
 
+/*!
+ * Amplify 1.1.2
+ *
+ * Copyright 2011 - 2013 appendTo LLC. (http://appendto.com/team)
+ * Dual licensed under the MIT or GPL licenses.
+ * http://appendto.com/open-source-licenses
+ *
+ * http://amplifyjs.com
+ */
+(function( global, undefined ) {
+
+var slice = [].slice,
+	subscriptions = {};
+
+var amplify = global.amplify = {
+	publish: function( topic ) {
+		if ( typeof topic !== "string" ) {
+			throw new Error( "You must provide a valid topic to publish." );
+		}
+
+		var args = slice.call( arguments, 1 ),
+			topicSubscriptions,
+			subscription,
+			length,
+			i = 0,
+			ret;
+
+		if ( !subscriptions[ topic ] ) {
+			return true;
+		}
+
+		topicSubscriptions = subscriptions[ topic ].slice();
+		for ( length = topicSubscriptions.length; i < length; i++ ) {
+			subscription = topicSubscriptions[ i ];
+			ret = subscription.callback.apply( subscription.context, args );
+			if ( ret === false ) {
+				break;
+			}
+		}
+		return ret !== false;
+	},
+
+	subscribe: function( topic, context, callback, priority ) {
+		if ( typeof topic !== "string" ) {
+			throw new Error( "You must provide a valid topic to create a subscription." );
+		}
+
+		if ( arguments.length === 3 && typeof callback === "number" ) {
+			priority = callback;
+			callback = context;
+			context = null;
+		}
+		if ( arguments.length === 2 ) {
+			callback = context;
+			context = null;
+		}
+		priority = priority || 10;
+
+		var topicIndex = 0,
+			topics = topic.split( /\s/ ),
+			topicLength = topics.length,
+			added;
+		for ( ; topicIndex < topicLength; topicIndex++ ) {
+			topic = topics[ topicIndex ];
+			added = false;
+			if ( !subscriptions[ topic ] ) {
+				subscriptions[ topic ] = [];
+			}
+
+			var i = subscriptions[ topic ].length - 1,
+				subscriptionInfo = {
+					callback: callback,
+					context: context,
+					priority: priority
+				};
+
+			for ( ; i >= 0; i-- ) {
+				if ( subscriptions[ topic ][ i ].priority <= priority ) {
+					subscriptions[ topic ].splice( i + 1, 0, subscriptionInfo );
+					added = true;
+					break;
+				}
+			}
+
+			if ( !added ) {
+				subscriptions[ topic ].unshift( subscriptionInfo );
+			}
+		}
+
+		return callback;
+	},
+
+	unsubscribe: function( topic, context, callback ) {
+		if ( typeof topic !== "string" ) {
+			throw new Error( "You must provide a valid topic to remove a subscription." );
+		}
+
+		if ( arguments.length === 2 ) {
+			callback = context;
+			context = null;
+		}
+
+		if ( !subscriptions[ topic ] ) {
+			return;
+		}
+
+		var length = subscriptions[ topic ].length,
+			i = 0;
+
+		for ( ; i < length; i++ ) {
+			if ( subscriptions[ topic ][ i ].callback === callback ) {
+				if ( !context || subscriptions[ topic ][ i ].context === context ) {
+					subscriptions[ topic ].splice( i, 1 );
+					
+					// Adjust counter and length for removed item
+					i--;
+					length--;
+				}
+			}
+		}
+	}
+};
+
+}( this ) );
+
+(function( amplify, undefined ) {
+
+var store = amplify.store = function( key, value, options ) {
+	var type = store.type;
+	if ( options && options.type && options.type in store.types ) {
+		type = options.type;
+	}
+	return store.types[ type ]( key, value, options || {} );
+};
+
+store.types = {};
+store.type = null;
+store.addType = function( type, storage ) {
+	if ( !store.type ) {
+		store.type = type;
+	}
+
+	store.types[ type ] = storage;
+	store[ type ] = function( key, value, options ) {
+		options = options || {};
+		options.type = type;
+		return store( key, value, options );
+	};
+};
+store.error = function() {
+	return "amplify.store quota exceeded";
+};
+
+var rprefix = /^__amplify__/;
+function createFromStorageInterface( storageType, storage ) {
+	store.addType( storageType, function( key, value, options ) {
+		var storedValue, parsed, i, remove,
+			ret = value,
+			now = (new Date()).getTime();
+
+		if ( !key ) {
+			ret = {};
+			remove = [];
+			i = 0;
+			try {
+				// accessing the length property works around a localStorage bug
+				// in Firefox 4.0 where the keys don't update cross-page
+				// we assign to key just to avoid Closure Compiler from removing
+				// the access as "useless code"
+				// https://bugzilla.mozilla.org/show_bug.cgi?id=662511
+				key = storage.length;
+
+				while ( key = storage.key( i++ ) ) {
+					if ( rprefix.test( key ) ) {
+						parsed = JSON.parse( storage.getItem( key ) );
+						if ( parsed.expires && parsed.expires <= now ) {
+							remove.push( key );
+						} else {
+							ret[ key.replace( rprefix, "" ) ] = parsed.data;
+						}
+					}
+				}
+				while ( key = remove.pop() ) {
+					storage.removeItem( key );
+				}
+			} catch ( error ) {}
+			return ret;
+		}
+
+		// protect against name collisions with direct storage
+		key = "__amplify__" + key;
+
+		if ( value === undefined ) {
+			storedValue = storage.getItem( key );
+			parsed = storedValue ? JSON.parse( storedValue ) : { expires: -1 };
+			if ( parsed.expires && parsed.expires <= now ) {
+				storage.removeItem( key );
+			} else {
+				return parsed.data;
+			}
+		} else {
+			if ( value === null ) {
+				storage.removeItem( key );
+			} else {
+				parsed = JSON.stringify({
+					data: value,
+					expires: options.expires ? now + options.expires : null
+				});
+				try {
+					storage.setItem( key, parsed );
+				// quota exceeded
+				} catch( error ) {
+					// expire old data and try again
+					store[ storageType ]();
+					try {
+						storage.setItem( key, parsed );
+					} catch( error ) {
+						throw store.error();
+					}
+				}
+			}
+		}
+
+		return ret;
+	});
+}
+
+// localStorage + sessionStorage
+// IE 8+, Firefox 3.5+, Safari 4+, Chrome 4+, Opera 10.5+, iPhone 2+, Android 2+
+for ( var webStorageType in { localStorage: 1, sessionStorage: 1 } ) {
+	// try/catch for file protocol in Firefox and Private Browsing in Safari 5
+	try {
+		// Safari 5 in Private Browsing mode exposes localStorage
+		// but doesn't allow storing data, so we attempt to store and remove an item.
+		// This will unfortunately give us a false negative if we're at the limit.
+		window[ webStorageType ].setItem( "__amplify__", "x" );
+		window[ webStorageType ].removeItem( "__amplify__" );
+		createFromStorageInterface( webStorageType, window[ webStorageType ] );
+	} catch( e ) {}
+}
+
+// globalStorage
+// non-standard: Firefox 2+
+// https://developer.mozilla.org/en/dom/storage#globalStorage
+if ( !store.types.localStorage && window.globalStorage ) {
+	// try/catch for file protocol in Firefox
+	try {
+		createFromStorageInterface( "globalStorage",
+			window.globalStorage[ window.location.hostname ] );
+		// Firefox 2.0 and 3.0 have sessionStorage and globalStorage
+		// make sure we default to globalStorage
+		// but don't default to globalStorage in 3.5+ which also has localStorage
+		if ( store.type === "sessionStorage" ) {
+			store.type = "globalStorage";
+		}
+	} catch( e ) {}
+}
+
+// userData
+// non-standard: IE 5+
+// http://msdn.microsoft.com/en-us/library/ms531424(v=vs.85).aspx
+(function() {
+	// IE 9 has quirks in userData that are a huge pain
+	// rather than finding a way to detect these quirks
+	// we just don't register userData if we have localStorage
+	if ( store.types.localStorage ) {
+		return;
+	}
+
+	// append to html instead of body so we can do this from the head
+	var div = document.createElement( "div" ),
+		attrKey = "amplify";
+	div.style.display = "none";
+	document.getElementsByTagName( "head" )[ 0 ].appendChild( div );
+
+	// we can't feature detect userData support
+	// so just try and see if it fails
+	// surprisingly, even just adding the behavior isn't enough for a failure
+	// so we need to load the data as well
+	try {
+		div.addBehavior( "#default#userdata" );
+		div.load( attrKey );
+	} catch( e ) {
+		div.parentNode.removeChild( div );
+		return;
+	}
+
+	store.addType( "userData", function( key, value, options ) {
+		div.load( attrKey );
+		var attr, parsed, prevValue, i, remove,
+			ret = value,
+			now = (new Date()).getTime();
+
+		if ( !key ) {
+			ret = {};
+			remove = [];
+			i = 0;
+			while ( attr = div.XMLDocument.documentElement.attributes[ i++ ] ) {
+				parsed = JSON.parse( attr.value );
+				if ( parsed.expires && parsed.expires <= now ) {
+					remove.push( attr.name );
+				} else {
+					ret[ attr.name ] = parsed.data;
+				}
+			}
+			while ( key = remove.pop() ) {
+				div.removeAttribute( key );
+			}
+			div.save( attrKey );
+			return ret;
+		}
+
+		// convert invalid characters to dashes
+		// http://www.w3.org/TR/REC-xml/#NT-Name
+		// simplified to assume the starting character is valid
+		// also removed colon as it is invalid in HTML attribute names
+		key = key.replace( /[^\-._0-9A-Za-z\xb7\xc0-\xd6\xd8-\xf6\xf8-\u037d\u037f-\u1fff\u200c-\u200d\u203f\u2040\u2070-\u218f]/g, "-" );
+		// adjust invalid starting character to deal with our simplified sanitization
+		key = key.replace( /^-/, "_-" );
+
+		if ( value === undefined ) {
+			attr = div.getAttribute( key );
+			parsed = attr ? JSON.parse( attr ) : { expires: -1 };
+			if ( parsed.expires && parsed.expires <= now ) {
+				div.removeAttribute( key );
+			} else {
+				return parsed.data;
+			}
+		} else {
+			if ( value === null ) {
+				div.removeAttribute( key );
+			} else {
+				// we need to get the previous value in case we need to rollback
+				prevValue = div.getAttribute( key );
+				parsed = JSON.stringify({
+					data: value,
+					expires: (options.expires ? (now + options.expires) : null)
+				});
+				div.setAttribute( key, parsed );
+			}
+		}
+
+		try {
+			div.save( attrKey );
+		// quota exceeded
+		} catch ( error ) {
+			// roll the value back to the previous value
+			if ( prevValue === null ) {
+				div.removeAttribute( key );
+			} else {
+				div.setAttribute( key, prevValue );
+			}
+
+			// expire old data and try again
+			store.userData();
+			try {
+				div.setAttribute( key, parsed );
+				div.save( attrKey );
+			} catch ( error ) {
+				// roll the value back to the previous value
+				if ( prevValue === null ) {
+					div.removeAttribute( key );
+				} else {
+					div.setAttribute( key, prevValue );
+				}
+				throw store.error();
+			}
+		}
+		return ret;
+	});
+}() );
+
+// in-memory storage
+// fallback for all browsers to enable the API even if we can't persist data
+(function() {
+	var memory = {},
+		timeout = {};
+
+	function copy( obj ) {
+		return obj === undefined ? undefined : JSON.parse( JSON.stringify( obj ) );
+	}
+
+	store.addType( "memory", function( key, value, options ) {
+		if ( !key ) {
+			return copy( memory );
+		}
+
+		if ( value === undefined ) {
+			return copy( memory[ key ] );
+		}
+
+		if ( timeout[ key ] ) {
+			clearTimeout( timeout[ key ] );
+			delete timeout[ key ];
+		}
+
+		if ( value === null ) {
+			delete memory[ key ];
+			return null;
+		}
+
+		memory[ key ] = value;
+		if ( options.expires ) {
+			timeout[ key ] = setTimeout(function() {
+				delete memory[ key ];
+				delete timeout[ key ];
+			}, options.expires );
+		}
+
+		return value;
+	});
+}() );
+
+}( this.amplify = this.amplify || {} ) );
+
+/*global amplify*/
+
+(function( amplify, undefined ) {
 'use strict';
 
-(function() {
+function noop() {}
+function isFunction( obj ) {
+	return ({}).toString.call( obj ) === "[object Function]";
+}
 
-    /**
-     * @ngdoc overview
-     * @name ngStorage
-     */
+function async( fn ) {
+	var isAsync = false;
+	setTimeout(function() {
+		isAsync = true;
+	}, 1 );
+	return function() {
+		var that = this,
+			args = arguments;
+		if ( isAsync ) {
+			fn.apply( that, args );
+		} else {
+			setTimeout(function() {
+				fn.apply( that, args );
+			}, 1 );
+		}
+	};
+}
 
-    angular.module('ngStorage', []).
+amplify.request = function( resourceId, data, callback ) {
+	// default to an empty hash just so we can handle a missing resourceId
+	// in one place
+	var settings = resourceId || {};
 
-    /**
-     * @ngdoc object
-     * @name ngStorage.$localStorage
-     * @requires $rootScope
-     * @requires $window
-     */
+	if ( typeof settings === "string" ) {
+		if ( isFunction( data ) ) {
+			callback = data;
+			data = {};
+		}
+		settings = {
+			resourceId: resourceId,
+			data: data || {},
+			success: callback
+		};
+	}
 
-    factory('$localStorage', _storageFactory('localStorage')).
+	var request = { abort: noop },
+		resource = amplify.request.resources[ settings.resourceId ],
+		success = settings.success || noop,
+		error = settings.error || noop;
 
-    /**
-     * @ngdoc object
-     * @name ngStorage.$sessionStorage
-     * @requires $rootScope
-     * @requires $window
-     */
+	settings.success = async( function( data, status ) {
+		status = status || "success";
+		amplify.publish( "request.success", settings, data, status );
+		amplify.publish( "request.complete", settings, data, status );
+		success( data, status );
+	});
 
-    factory('$sessionStorage', _storageFactory('sessionStorage'));
+	settings.error = async( function( data, status ) {
+		status = status || "error";
+		amplify.publish( "request.error", settings, data, status );
+		amplify.publish( "request.complete", settings, data, status );
+		error( data, status );
+	});
 
-    function _storageFactory(storageType) {
-        return [
-            '$rootScope',
-            '$window',
+	if ( !resource ) {
+		if ( !settings.resourceId ) {
+			throw "amplify.request: no resourceId provided";
+		}
+		throw "amplify.request: unknown resourceId: " + settings.resourceId;
+	}
 
-            function(
-                $rootScope,
-                $window
-            ){
-                // #9: Assign a placeholder object if Web Storage is unavailable to prevent breaking the entire AngularJS app
-                var webStorage = $window[storageType] || (console.warn('This browser does not support Web Storage!'), {}),
-                    $storage = {
-                        $default: function(items) {
-                            for (var k in items) {
-                                angular.isDefined($storage[k]) || ($storage[k] = items[k]);
-                            }
+	if ( !amplify.publish( "request.before", settings ) ) {
+		settings.error( null, "abort" );
+		return;
+	}
 
-                            return $storage;
-                        },
-                        $reset: function(items) {
-                            for (var k in $storage) {
-                                '$' === k[0] || delete $storage[k];
-                            }
+	amplify.request.resources[ settings.resourceId ]( settings, request );
+	return request;
+};
 
-                            return $storage.$default(items);
-                        }
-                    },
-                    _last$storage,
-                    _debounce;
+amplify.request.types = {};
+amplify.request.resources = {};
+amplify.request.define = function( resourceId, type, settings ) {
+	if ( typeof type === "string" ) {
+		if ( !( type in amplify.request.types ) ) {
+			throw "amplify.request.define: unknown type: " + type;
+		}
 
-                for (var i = 0, k; i < webStorage.length; i++) {
-                    // #8, #10: `webStorage.key(i)` may be an empty string (or throw an exception in IE9 if `webStorage` is empty)
-                    (k = webStorage.key(i)) && 'ngStorage-' === k.slice(0, 10) && ($storage[k.slice(10)] = angular.fromJson(webStorage.getItem(k)));
-                }
+		settings.resourceId = resourceId;
+		amplify.request.resources[ resourceId ] =
+			amplify.request.types[ type ]( settings );
+	} else {
+		// no pre-processor or settings for one-off types (don't invoke)
+		amplify.request.resources[ resourceId ] = type;
+	}
+};
 
-                _last$storage = angular.copy($storage);
+}( amplify ) );
 
-                $rootScope.$watch(function() {
-                    _debounce || (_debounce = setTimeout(function() {
-                        _debounce = null;
 
-                        if (!angular.equals($storage, _last$storage)) {
-                            angular.forEach($storage, function(v, k) {
-                                angular.isDefined(v) && '$' !== k[0] && webStorage.setItem('ngStorage-' + k, angular.toJson(v));
+(function( amplify, $, undefined ) {
+'use strict';
 
-                                delete _last$storage[k];
-                            });
+var xhrProps = [ "status", "statusText", "responseText", "responseXML", "readyState" ],
+		rurlData = /\{([^\}]+)\}/g;
 
-                            for (var k in _last$storage) {
-                                webStorage.removeItem('ngStorage-' + k);
-                            }
+amplify.request.types.ajax = function( defnSettings ) {
+	defnSettings = $.extend({
+		type: "GET"
+	}, defnSettings );
 
-                            _last$storage = angular.copy($storage);
-                        }
-                    }, 100));
-                });
+	return function( settings, request ) {
+		var xhr, handleResponse,
+			url = defnSettings.url,
+			abort = request.abort,
+			ajaxSettings = $.extend( true, {}, defnSettings, { data: settings.data } ),
+			aborted = false,
+			ampXHR = {
+				readyState: 0,
+				setRequestHeader: function( name, value ) {
+					return xhr.setRequestHeader( name, value );
+				},
+				getAllResponseHeaders: function() {
+					return xhr.getAllResponseHeaders();
+				},
+				getResponseHeader: function( key ) {
+					return xhr.getResponseHeader( key );
+				},
+				overrideMimeType: function( type ) {
+					return xhr.overrideMimeType( type );
+				},
+				abort: function() {
+					aborted = true;
+					try {
+						xhr.abort();
+					// IE 7 throws an error when trying to abort
+					} catch( e ) {}
+					handleResponse( null, "abort" );
+				},
+				success: function( data, status ) {
+					settings.success( data, status );
+				},
+				error: function( data, status ) {
+					settings.error( data, status );
+				}
+			};
 
-                // #6: Use `$window.addEventListener` instead of `angular.element` to avoid the jQuery-specific `event.originalEvent`
-                'localStorage' === storageType && $window.addEventListener && $window.addEventListener('storage', function(event) {
-                    if ('ngStorage-' === event.key.slice(0, 10)) {
-                        event.newValue ? $storage[event.key.slice(10)] = angular.fromJson(event.newValue) : delete $storage[event.key.slice(10)];
+		handleResponse = function( data, status ) {
+			$.each( xhrProps, function( i, key ) {
+				try {
+					ampXHR[ key ] = xhr[ key ];
+				} catch( e ) {}
+			});
+			// Playbook returns "HTTP/1.1 200 OK"
+			// TODO: something also returns "OK", what?
+			if ( /OK$/.test( ampXHR.statusText ) ) {
+				ampXHR.statusText = "success";
+			}
+			if ( data === undefined ) {
+				// TODO: add support for ajax errors with data
+				data = null;
+			}
+			if ( aborted ) {
+				status = "abort";
+			}
+			if ( /timeout|error|abort/.test( status ) ) {
+				ampXHR.error( data, status );
+			} else {
+				ampXHR.success( data, status );
+			}
+			// avoid handling a response multiple times
+			// this can happen if a request is aborted
+			// TODO: figure out if this breaks polling or multi-part responses
+			handleResponse = $.noop;
+		};
 
-                        _last$storage = angular.copy($storage);
+		amplify.publish( "request.ajax.preprocess",
+			defnSettings, settings, ajaxSettings, ampXHR );
 
-                        $rootScope.$apply();
-                    }
-                });
+		$.extend( ajaxSettings, {
+			isJSONP: function () {
+				return (/jsonp/gi).test(this.dataType);
+			},
+			cacheURL: function () {
+				if (!this.isJSONP()) {
+					return this.url;
+				}
 
-                return $storage;
-            }
-        ];
-    }
+				var callbackName = 'callback';
 
-})();
+				// possible for the callback function name to be overridden
+				if (this.hasOwnProperty('jsonp')) {
+					if (this.jsonp !== false) {
+						callbackName = this.jsonp;
+					} else {
+						if (this.hasOwnProperty('jsonpCallback')) {
+							callbackName = this.jsonpCallback;
+						}
+					}
+				}
+
+				// search and replace callback parameter in query string with empty string
+				var callbackRegex = new RegExp('&?' + callbackName + '=[^&]*&?', 'gi');
+				return this.url.replace(callbackRegex, '');
+			},
+			success: function( data, status ) {
+				handleResponse( data, status );
+			},
+			error: function( _xhr, status ) {
+				handleResponse( null, status );
+			},
+			beforeSend: function( _xhr, _ajaxSettings ) {
+				xhr = _xhr;
+				ajaxSettings = _ajaxSettings;
+				var ret = defnSettings.beforeSend ?
+					defnSettings.beforeSend.call( this, ampXHR, ajaxSettings ) : true;
+				return ret && amplify.publish( "request.before.ajax",
+					defnSettings, settings, ajaxSettings, ampXHR );
+			}
+		});
+
+		// cache all JSONP requests
+		if (ajaxSettings.cache && ajaxSettings.isJSONP()) {
+			$.extend(ajaxSettings, {
+				cache: true
+			});
+		}
+
+		$.ajax( ajaxSettings );
+
+		request.abort = function() {
+			ampXHR.abort();
+			abort.call( this );
+		};
+	};
+};
+
+
+
+amplify.subscribe( "request.ajax.preprocess", function( defnSettings, settings, ajaxSettings ) {
+	var mappedKeys = [],
+		data = ajaxSettings.data;
+
+	if ( typeof data === "string" ) {
+		return;
+	}
+
+	data = $.extend( true, {}, defnSettings.data, data );
+
+	ajaxSettings.url = ajaxSettings.url.replace( rurlData, function ( m, key ) {
+		if ( key in data ) {
+			mappedKeys.push( key );
+			return data[ key ];
+		}
+	});
+
+	// We delete the keys later so duplicates are still replaced
+	$.each( mappedKeys, function ( i, key ) {
+		delete data[ key ];
+	});
+
+	ajaxSettings.data = data;
+});
+
+
+
+amplify.subscribe( "request.ajax.preprocess", function( defnSettings, settings, ajaxSettings ) {
+	var data = ajaxSettings.data,
+		dataMap = defnSettings.dataMap;
+
+	if ( !dataMap || typeof data === "string" ) {
+		return;
+	}
+
+	if ( $.isFunction( dataMap ) ) {
+		ajaxSettings.data = dataMap( data );
+	} else {
+		$.each( defnSettings.dataMap, function( orig, replace ) {
+			if ( orig in data ) {
+				data[ replace ] = data[ orig ];
+				delete data[ orig ];
+			}
+		});
+		ajaxSettings.data = data;
+	}
+});
+
+
+
+var cache = amplify.request.cache = {
+	_key: function( resourceId, url, data ) {
+		data = url + data;
+		var length = data.length,
+			i = 0;
+
+		/*jshint bitwise:false*/
+		function chunk() {
+			return data.charCodeAt( i++ ) << 24 |
+				data.charCodeAt( i++ ) << 16 |
+				data.charCodeAt( i++ ) << 8 |
+				data.charCodeAt( i++ ) << 0;
+		}
+
+		var checksum = chunk();
+		while ( i < length ) {
+			checksum ^= chunk();
+		}
+		/*jshint bitwise:true*/
+
+		return "request-" + resourceId + "-" + checksum;
+	},
+
+	_default: (function() {
+		var memoryStore = {};
+		return function( resource, settings, ajaxSettings, ampXHR ) {
+			// data is already converted to a string by the time we get here
+			var cacheKey = cache._key( settings.resourceId,
+					ajaxSettings.cacheURL(), ajaxSettings.data ),
+				duration = resource.cache;
+
+			if ( cacheKey in memoryStore ) {
+				ampXHR.success( memoryStore[ cacheKey ] );
+				return false;
+			}
+			var success = ampXHR.success;
+			ampXHR.success = function( data ) {
+				memoryStore[ cacheKey ] = data;
+				if ( typeof duration === "number" ) {
+					setTimeout(function() {
+						delete memoryStore[ cacheKey ];
+					}, duration );
+				}
+				success.apply( this, arguments );
+			};
+		};
+	}())
+};
+
+if ( amplify.store ) {
+	$.each( amplify.store.types, function( type ) {
+		cache[ type ] = function( resource, settings, ajaxSettings, ampXHR ) {
+			var cacheKey = cache._key( settings.resourceId,
+					ajaxSettings.cacheURL(), ajaxSettings.data ),
+				cached = amplify.store[ type ]( cacheKey );
+
+			if ( cached ) {
+				ajaxSettings.success( cached );
+				return false;
+			}
+			var success = ampXHR.success;
+			ampXHR.success = function( data ) {
+				amplify.store[ type ]( cacheKey, data, { expires: resource.cache.expires } );
+				success.apply( this, arguments );
+			};
+		};
+	});
+	cache.persist = cache[ amplify.store.type ];
+}
+
+amplify.subscribe( "request.before.ajax", function( resource ) {
+	var cacheType = resource.cache;
+	if ( cacheType ) {
+		// normalize between objects and strings/booleans/numbers
+		cacheType = cacheType.type || cacheType;
+		return cache[ cacheType in cache ? cacheType : "_default" ]
+			.apply( this, arguments );
+	}
+});
+
+
+
+amplify.request.decoders = {
+	// http://labs.omniti.com/labs/jsend
+	jsend: function( data, status, ampXHR, success, error ) {
+		if ( data.status === "success" ) {
+			success( data.data );
+		} else if ( data.status === "fail" ) {
+			error( data.data, "fail" );
+		} else if ( data.status === "error" ) {
+			delete data.status;
+			error( data, "error" );
+		} else {
+			error( null, "error" );
+		}
+	}
+};
+
+amplify.subscribe( "request.before.ajax", function( resource, settings, ajaxSettings, ampXHR ) {
+	var _success = ampXHR.success,
+		_error = ampXHR.error,
+		decoder = $.isFunction( resource.decoder ) ?
+			resource.decoder :
+			resource.decoder in amplify.request.decoders ?
+				amplify.request.decoders[ resource.decoder ] :
+				amplify.request.decoders._default;
+
+	if ( !decoder ) {
+		return;
+	}
+
+	function success( data, status ) {
+		_success( data, status );
+	}
+	function error( data, status ) {
+		_error( data, status );
+	}
+	ampXHR.success = function( data, status ) {
+		decoder( data, status, ampXHR, success, error );
+	};
+	ampXHR.error = function( data, status ) {
+		decoder( data, status, ampXHR, success, error );
+	};
+});
+
+}( amplify, jQuery ) );
 
 
 /*!
