@@ -6,30 +6,140 @@ angular.module('app.services').factory('errorReporter', function() {
       };
     }
   };
-}).factory('storageService', function($sessionStorage, $localStorage, fileSystem) {
+}).factory('storageService', function($q) {
+  var appDetails;
+  appDetails = {};
   return {
     isAuthenticateTimeAndSet: function() {
       var shouldAuthenticate;
       shouldAuthenticate = false;
-      if (!$localStorage.lastAuthenticateTime || moment().diff(moment($localStorage.lastAuthenticateTime), 'hours') > 1) {
+      if (!amplify.store('lastAuthenticateTime') || moment().diff(moment(amplify.store('lastAuthenticateTime')), 'hours') > 1) {
         shouldAuthenticate = true;
       }
       if (shouldAuthenticate) {
-        $localStorage.lastAuthenticateTime = moment().toISOString();
+        amplify.store('lastAuthenticateTime', moment().toISOString());
       }
       return shouldAuthenticate;
     },
     getUserDetails: function() {
-      return $localStorage.user;
+      return amplify.store('user');
+    },
+    setAppName: function(appName, appDomain) {
+      appDetails = {
+        appName: appName,
+        appDomain: appDomain
+      };
+      return amplify.store('appDetails', appDetails);
+    },
+    isUserExists: function() {
+      return !!amplify.store('user');
     },
     setUserDetails: function(userDetails) {
-      return $localStorage.user = userDetails;
+      return amplify.store('user', userDetails);
+    },
+    setLastModifiedDate: function(appName, tableName, updatedAt) {
+      return amplify.store('user').lastModifiedDate["" + appName + "-" + tableName] = updatedAt;
     },
     getEncryptionKey: function() {
-      return $localStorage["" + $localStorage.user.id + "-encryptionKey"];
+      var userId;
+      userId = amplify.store('user').id;
+      if (!userId) {
+        return null;
+      }
+      return amplify.store("" + userId + "-encryptionKey");
     },
     setEncryptionKey: function(encryptionKey) {
-      return $localStorage["" + $localStorage.user.id + "-encryptionKey"] = encryptionKey;
+      var userId;
+      userId = amplify.store('user').id;
+      if (!userId) {
+        return;
+      }
+      return amplify.store("" + userId + "-encryptionKey", encryptionKey);
+    },
+    onLogout: function() {
+      var userId;
+      userId = amplify.store('user').id;
+      if (!userId) {
+        return;
+      }
+      amplify.store("" + userId + "-encryptionKey", null);
+      return amplify.store('user', null);
+    },
+    getToken: function() {
+      return amplify.store("auth-token");
+    },
+    setToken: function(token) {
+      return amplify.store("auth-token", token);
+    },
+    getSuccessMsg: function() {
+      return amplify.store.sessionStorage('successMsg');
+    },
+    setSuccessMsg: function(msg) {
+      return amplify.store.sessionStorage('successMsg', msg);
+    },
+    getNoticeMsg: function() {
+      return amplify.store.sessionStorage('noticeMsg');
+    },
+    setNoticeMsg: function(msg) {
+      return amplify.store.sessionStorage('noticeMsg', msg);
+    },
+    clearMsgs: function() {
+      amplify.store.sessionStorage('successMsg', null);
+      return amplify.store.sessionStorage('noticeMsg', null);
+    },
+    readFile: function(fileName) {
+      var defer;
+      defer = $q.defer();
+      this.setupFilesystem().then(function(config) {
+        return config.filer.open('/db/ ' + fileName, function(file) {
+          var reader;
+          reader = new FileReader();
+          reader.onload = function(e) {
+            return defer.resolve(reader.result);
+          };
+          return read.readAsArrayBuffer(file);
+        }, function(err) {
+          return defer.reject(err);
+        });
+      });
+      return defer.promise;
+    },
+    writeFile: function(fileName, content) {
+      var defer;
+      defer = $q.defer();
+      this.setupFilesystem().then(function(config) {
+        return config.filer.write('/db/' + fileName, {
+          data: content,
+          type: 'text/plain'
+        }, function(fileEntry, fileWriter) {
+          return defer.resolve(config);
+        }, function(err) {
+          return defer.reject(err);
+        });
+      }, function(err) {
+        return defer.reject(err);
+      });
+      return defer.promise;
+    },
+    setupFilesystem: function() {
+      var defer, filer;
+      defer = $q.defer();
+      filer = new Filer();
+      filer.init({
+        size: 1024 * 1024 * 50
+      }, function(fs) {
+        return filer.mkdir('/db', false, function(dirEntry) {
+          return defer.resolve({
+            fs: fs,
+            filer: filer
+          });
+        }, function(err) {
+          return defer.reject(err);
+        });
+      }, function(err) {
+        return defer.reject(err);
+      });
+      return defer.promise;
     }
   };
 });

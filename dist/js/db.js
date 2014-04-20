@@ -534,7 +534,7 @@ window.SimpleCollection = (function() {
 })();
 
 window.Database = (function() {
-  function Database(appName, $http, $q, $sessionStorage, $localStorage, fileSystem) {
+  function Database(appName, $q, storageService, userService) {
     this.saveTables = __bind(this.saveTables, this);
     this.readTablesFromWeb = __bind(this.readTablesFromWeb, this);
     this.authenticate = __bind(this.authenticate, this);
@@ -544,12 +544,10 @@ window.Database = (function() {
     this.readTablesFromFS = __bind(this.readTablesFromFS, this);
     this.createCollection = __bind(this.createCollection, this);
     this.user = __bind(this.user, this);
-    this.$http = $http;
     this.$q = $q;
-    this.$sessionStorage = $sessionStorage;
-    this.$localStorage = $localStorage;
+    this.storageService = storageService;
     this.appName = appName;
-    this.fileSystem = fileSystem;
+    this.userService = userService;
     this.db = {
       user: {
         config: {
@@ -576,7 +574,7 @@ window.Database = (function() {
     var promises;
     promises = tableNames.map((function(_this) {
       return function(tableName) {
-        return _this.fileSystem.readFile('/db/' + _this.fileName(_this.db.user.id, tableName)).then(function(content) {
+        return _this.storageService.readFile(_this.fileName(_this.db.user.id, tableName)).then(function(content) {
           return {
             name: tableName,
             content: JSON.parse(content)
@@ -591,7 +589,7 @@ window.Database = (function() {
     var promises;
     promises = tableNames.map((function(_this) {
       return function(tableName) {
-        return _this.fileSystem.writeText('/db/' + _this.fileName(_this.db.user.id, tableName), angular.toJson(_this.collectionToStorage(tableName))).then(function() {
+        return _this.storageService.writeFile(_this.fileName(_this.db.user.id, tableName), angular.toJson(_this.collectionToStorage(tableName))).then(function() {
           return console.log('write', tableName, 'to FS');
         }, function(err) {
           return console.log('failed to write', tableName, 'to FS', err);
@@ -628,16 +626,14 @@ window.Database = (function() {
   Database.prototype.authenticate = function() {
     var defer;
     defer = this.$q.defer();
-    this.$http.get('/data/authenticate').success((function(_this) {
-      return function(response, status, headers) {
-        _this.$localStorage.user = response.user;
-        return defer.resolve();
-      };
-    })(this)).error(function(data, status, headers) {
+    this.userService.checkLogin().then(function(response) {
+      this.storageService.setUserDetails(response.data.user);
+      return defer.resolve();
+    }, function(response) {
       return defer.reject({
-        data: data,
-        status: status,
-        headers: headers
+        data: response.data,
+        status: response.status,
+        headers: response.headers
       });
     });
     return defer.promise;
@@ -672,16 +668,14 @@ window.Database = (function() {
         } else {
           getDataFrom = dbModel.updatedAt;
         }
-        promise = _this.$http.get(("/data/" + _this.appName + "/" + tableName + "?") + $.param({
-          updatedAt: getDataFrom
-        })).then(function(response) {
+        promise = _this.userService.readData(_this.appName, tableName, getDataFrom).then(function(response) {
           var err;
           try {
             dbModel.actionsLog = [];
             return response.data.actions.forEach(function(op) {
               if (op.action === 'update') {
                 try {
-                  return dbModel.$updateOrSet(JSON.parse(sjcl.decrypt(_this.$localStorage["" + _this.db.user.id + "-encryptionKey"], op.item)), op.updatedAt);
+                  return dbModel.$updateOrSet(JSON.parse(sjcl.decrypt(_this.storageService.getEncryptionKey(), op.item)), op.updatedAt);
                 } catch (_error) {
                   console.log('failed to decrypt', tableName, op);
                   throw 'failed to decrypt';
@@ -722,12 +716,12 @@ window.Database = (function() {
     loadedDataFromFS = false;
     copyUserDataFromSession = (function(_this) {
       return function() {
-        return _this.db.user = angular.extend(_this.db.user, angular.copy(_this.$localStorage.user));
+        return _this.db.user = angular.extend(_this.db.user, angular.copy(_this.storageService.getUserDetails()));
       };
     })(this);
     onAuthenticated = (function(_this) {
       return function() {
-        if (!_this.$localStorage["" + _this.db.user.id + "-encryptionKey"]) {
+        if (!_this.storageService.getEncryptionKey()) {
           return deferred.reject({
             data: {
               reason: 'missing_key'
@@ -798,7 +792,7 @@ window.Database = (function() {
       this.authenticate().then(onAuthenticated, onFailedAuthenticate);
     } else {
       copyUserDataFromSession();
-      if (!this.$localStorage["" + this.db.user.id + "-encryptionKey"]) {
+      if (!this.storageService.getEncryptionKey()) {
         deferred.reject({
           data: {
             reason: 'missing_key'
@@ -825,12 +819,12 @@ window.Database = (function() {
     if (forceRefreshAll == null) {
       forceRefreshAll = false;
     }
-    if (this.$localStorage.user && forceRefreshAll) {
+    if (this.storageService.isUserExists() && forceRefreshAll) {
       return this.performGet(tableList, {
         initialState: 'readFromWeb',
         forceRefreshAll: true
       });
-    } else if (this.$localStorage.user && !forceRefreshAll) {
+    } else if (this.storageService.isUserExists() && !forceRefreshAll) {
       return this.performGet(tableList, {
         initialState: 'readFromFS',
         forceRefreshAll: false
@@ -860,21 +854,21 @@ window.Database = (function() {
             return actions.push({
               action: 'insert',
               id: item.id,
-              item: sjcl.encrypt(_this.$localStorage["" + _this.db.user.id + "-encryptionKey"], angular.toJson(item))
+              item: sjcl.encrypt(_this.storageService.getEncryptionKey(), angular.toJson(item))
             });
           });
         } else {
           actions = dbModel.actionsLog;
           actions.forEach(function(action) {
             if (action.item) {
-              return action.item = sjcl.encrypt(_this.$localStorage["" + _this.db.user.id + "-encryptionKey"], angular.toJson(action.item));
+              return action.item = sjcl.encrypt(_this.storageService.getEncryptionKey(), angular.toJson(action.item));
             }
           });
         }
-        promise = _this.$http.post("/data/" + _this.appName + "/" + tableName + "?all=" + (!!forceServerCleanAndSaveAll), actions).then(function(response) {
+        promise = _this.userService.writeData(_this.appName, tableName, actions, forceServerCleanAndSaveAll).then(function(response) {
           dbModel.updatedAt = response.data.updatedAt;
           _this.db.user.lastModifiedDate["" + _this.appName + "-" + tableName] = dbModel.updatedAt;
-          _this.$localStorage.user.lastModifiedDate["" + _this.appName + "-" + tableName] = dbModel.updatedAt;
+          _this.storageService.setLastModifiedDate(_this.appName, tableName, dbModel.updatedAt);
           return dbModel.actionsLog = [];
         });
         return promises.push(promise);

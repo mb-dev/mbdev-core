@@ -9,16 +9,17 @@
     "url": "https://github.com/mb-dev/mbdev-core"
   },
   "dependencies": {
-    
+    "gulp-util": "~2.2.14",
+    "gulp": "~3.5.2",
+    "gulp-jade": "~0.4.1",
+    "gulp-coffee": "~1.4.1",
+    "gulp-less": "~1.2.1",
+    "gulp-if": "0.0.5",
+    "gulp-debug": "~0.2.0",
+    "gulp-concat": "~2.1.7",
+    "coffee-script": "~1.7.1"
   },
   "devDependencies": {
-    "grunt": "0.4.2",
-    "grunt-contrib-watch": "0.5.3",
-    "grunt-contrib-jade": "0.8.0",
-    "grunt-contrib-concat": "0.3.0",
-    "grunt-contrib-coffee": "0.7.0",
-    "grunt-contrib-copy": "0.4.1",
-    "grunt-contrib-uglify": "0.2.7",
-    "grunt-contrib-less": "0.8.3"
+    
   }
 }
