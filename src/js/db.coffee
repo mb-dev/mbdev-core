@@ -575,6 +575,7 @@ class window.Box
     @rowByHash = {}
   
   addRow: (item) ->
+    return if @rowByHash[item]
     row = {columns: {}, totals: {}}
     @rows.push row
     @rowByHash[item] = row
@@ -594,6 +595,9 @@ class window.Box
 
   addToValue: (row, col, type, value) ->
     return if !row
+    if !@rowByHash[row]
+      console.log("missing item", row)
+      return
     column = @rowByHash[row]['columns'][col]
     column['values'][type] = column['values'][type].plus(value)
     @rowByHash[row]['totals'][type] = @rowByHash[row]['totals'][type].plus(value)

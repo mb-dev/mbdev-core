@@ -287,4 +287,6 @@ angular.module('app.directives')
     (string) ->
       return '' if !string
       $sce.trustAsHtml(string.replace(/\n/g, '<br/>'));
-        
+
+  .filter 'encodeUri', ($window) ->
+    return $window.encodeURIComponent
