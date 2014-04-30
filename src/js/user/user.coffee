@@ -86,7 +86,7 @@ angular.module('app.services')
     if Lazy($location.host()).contains('local.com')
       apiServerUrl = 'http://api.moshebergman.local.com:10000'
     else if Lazy($location.host()).contains('vagrant.com')
-      apiServerUrl = 'http://api.moshebergman.vagrant.com:10000'
+      apiServerUrl = 'http://api.moshebergman.vagrant.com'
     else
       apiServerUrl = 'https://api.moshebergman.com'
     {
