@@ -25,14 +25,14 @@
     "sjcl": "1.0.0",
     "selectize": "0.8.5",
     "bignumber.js": "~1.3.0",
-    "csv": "~0.1.2",
     "ngstorage": "https://github.com/gsklee/ngStorage.git",
     "lazy.js": "~0.3.2",
     "angular-moment": "~0.6.1",
     "checklist-model": "~0.1.1",
     "font-awesome": "~4.0.3",
     "filer.js": "https://github.com/SamyPesse/filer.js.git#patch-1",
-    "amplify": "~1.1.2"
+    "amplify": "~1.1.2",
+    "csv-js": "*"
   },
   "license": "MIT",
   "private": true,

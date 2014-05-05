@@ -24055,265 +24055,314 @@ Picker.extend( 'pickatime', TimePicker )
 
 
 
-/**
- * csv.js
- *
- * @author Jason Mulligan <jason.mulligan@avoidwork.com>
- * @copyright 2013 Jason Mulligan
- * @license BSD-3 <https://raw.github.com/avoidwork/csv.js/master/LICENSE>
- * @link https://github.com/avoidwork/csv.js
- * @module csv.js
- * @version 0.1.2
+/*
+ CSV-JS - A Comma-Separated Values parser for JS
+
+ Built to rfc4180 standard, with options for adjusting strictness:
+    - optional carriage returns for non-microsoft sources
+    - automatically type-cast numeric an boolean values
+    - relaxed mode which: ignores blank lines, ignores gargabe following quoted tokens, does not enforce a consistent record length
+
+ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ Author Greg Kindel (twitter @gkindel), 2013
  */
-( function ( global ) {
-"use strict";
 
-var REGEX_IE      = /msie|ie/i,
-    REGEX_NL      = /\n$/,
-    REGEX_OBJTYPE = /\[object Object\]/,
-    REGEX_QUOTE   = /^\s|\"|\n|,|\s$/,
-    navigator     = global.navigator,
-    ie            = navigator ? REGEX_IE.test( navigator.userAgent ) : false,
-    version       = ie ? parseInt( navigator.userAgent.replace( /(.*msie|;.*)/gi, "" ), 10 ) : null;
+(function () {
+    /**
+     * @name CSV
+     * @namespace
+     */
+    // implemented as a singleton because JS is single threaded
+    var CSV = {};
+    CSV.RELAXED = false;
+    CSV.IGNORE_RECORD_LENGTH = false;
+    CSV.IGNORE_QUOTES = false;
+    CSV.LINE_FEED_OK = true;
+    CSV.CARRIAGE_RETURN_OK = true;
+    CSV.DETECT_TYPES = true;
+    CSV.IGNORE_QUOTE_WHITESPACE = true;
+    CSV.DEBUG = false;
 
-/**
- * Returns an Object ( NodeList, etc. ) as an Array
- *
- * @method cast
- * @param  {Object}  obj Object to cast
- * @param  {Boolean} key [Optional] Returns key or value, only applies to Objects without a length property
- * @return {Array}       Object as an Array
- */
-var cast = function () {
-	if ( !ie || version > 8) {
-		return function ( obj, key ) {
-			key = ( key === true );
-			var o = [];
+    CSV.ERROR_EOF = "UNEXPECTED_END_OF_FILE";
+    CSV.ERROR_CHAR = "UNEXPECTED_CHARACTER";
+    CSV.ERROR_EOL = "UNEXPECTED_END_OF_RECORD";
+    CSV.WARN_SPACE = "UNEXPECTED_WHITESPACE"; // not per spec, but helps debugging
 
-			if ( !isNaN( obj.length ) ) {
-				o = Array.prototype.slice.call( obj );
-			}
-			else {
-				key ? o = keys( obj )
-				    : iterate( obj, function ( i ) {
-				    	o.push( i );
-				      });
-			}
+    var QUOTE = "\"",
+        CR = "\r",
+        LF = "\n",
+        COMMA = ",",
+        SPACE = " ",
+        TAB = "\t";
 
-			return o;
-		};
-	}
-	else {
-		return function ( obj, key ) {
-			key   = ( key === true );
-			var o = [];
+    // states
+    var PRE_TOKEN = 0,
+        MID_TOKEN = 1,
+        POST_TOKEN = 2,
+        POST_RECORD = 4;
+    /**
+     * @name CSV.parse
+     * @function
+     * @description rfc4180 standard csv parse
+     * with options for strictness and data type conversion
+     * By default, will automatically type-cast numeric an boolean values.
+     * @param {String} str A CSV string
+     * @return {Array} An array records, each of which is an array of scalar values.
+     * @example
+     * // simple
+     * var rows = CSV.parse("one,two,three\nfour,five,six")
+     * // rows equals [["one","two","three"],["four","five","six"]]
+     * @example
+     * // Though not a jQuery plugin, it is recommended to use with the $.ajax pipe() method:
+     * $.get("csv.txt")
+     *    .pipe( CSV.parse )
+     *    .done( function(rows) {
+     *        for( var i =0; i < rows.length; i++){
+     *            console.log(rows[i])
+     *        }
+     *  });
+     * @see http://www.ietf.org/rfc/rfc4180.txt
+     */
+    CSV.parse = function (str) {
+        var result = CSV.result = [];
+        CSV.offset = 0;
+        CSV.str = str;
+        CSV.record_begin();
 
-			if ( !isNaN( obj.length ) ) {
-				try {
-					o = Array.prototype.slice.call( obj );
-				}
-				catch ( e ) {
-					iterate( obj, function ( i, idx ) {
-						if ( idx !== "length" ) {
-							o.push( i );
-						}
-					});
-				}
-			}
-			else {
-				key ? o = keys( obj )
-				    : iterate(obj, function ( i ) {
-				    	o.push(i);
-				      });
-			}
+        CSV.debug("parse()", str);
 
-			return o;
-		};
-	}
-}();
+        var c;
+        while( 1 ){
+            // pull char
+            c = str[CSV.offset++];
+            CSV.debug("c", c);
 
-/**
- * Transforms JSON to CSV
- * 
- * @method csv
- * @param  {String}  arg       Array, Object or JSON String to transform
- * @param  {String}  delimiter [Optional] Character to separate fields
- * @param  {Boolean} header    [Optional] False to not include field names as first row
- * @return {String}            CSV string
- */
-var csv = function ( arg, delimiter, header ) {
-	delimiter  = delimiter || ",";
-	header     = ( header !== false );
-	var obj    = decode( arg ) || arg,
-	    result = "";
+            // detect eof
+            if (c == null) {
+                if( CSV.escaped )
+                    CSV.error(CSV.ERROR_EOF);
 
-	if ( obj instanceof Array ) {
-		if ( obj[0] instanceof Object ) {
-			if ( header ) {
-				result = ( keys( obj[0] ).join( delimiter ) + "\n" );
-			}
+                if( CSV.record ){
+                    CSV.token_end();
+                    CSV.record_end();
+                }
 
-			result += obj.map( function ( i ) {
-				return csv( i, delimiter, false );
-			}).join( "\n" );
-		}
-		else {
-			result += ( prepare( obj, delimiter ) + "\n" );
-		}
-	}
-	else {
-		if ( header ) {
-			result = ( keys( obj ).join( delimiter ) + "\n" );
-		}
+                CSV.debug("...bail", c, CSV.state, CSV.record);
+                CSV.reset();
+                break;
+            }
 
-		result += ( cast( obj ).map( function ( i ) {
-			return prepare( i, delimiter );
-		}).join( delimiter ) + "\n" );
-	}
+            if( CSV.record == null ){
+                // if relaxed mode, ignore blank lines
+                if( CSV.RELAXED && (c == LF || c == CR && str[CSV.offset + 1] == LF) ){
+                    continue;
+                }
+                CSV.record_begin();
+            }
 
-	return result.replace( REGEX_NL, "" );
-};
+            // pre-token: look for start of escape sequence
+            if (CSV.state == PRE_TOKEN) {
 
-/**
- * Decodes the argument
- *
- * @method decode
- * @param  {String}  arg String to parse
- * @return {Mixed}       Entity resulting from parsing JSON, or undefined
- */
-function decode ( arg ) {
-	try {
-		return JSON.parse( arg );
-	}
-	catch ( e ) {
-		return undefined;
-	}
-};
+                if ( (c === SPACE || c === TAB) && CSV.next_nonspace() == QUOTE ){
+                    if( CSV.RELAXED || CSV.IGNORE_QUOTE_WHITESPACE ) {
+                        continue;
+                    }
+                    else {
+                        // not technically an error, but ambiguous and hard to debug otherwise
+                        CSV.warn(CSV.WARN_SPACE);
+                    }
+                }
 
-/**
- * Iterates an Object and executes a function against the properties
- *
- * Iteration can be stopped by returning false from fn
- * 
- * @method iterate
- * @param  {Object}   obj Object to iterate
- * @param  {Function} fn  Function to execute against properties
- * @return {Object}       Object
- */
-var iterate = function () {
-	if ( typeof Object.keys === "function" ) {
-		return function ( obj, fn ) {
-			if ( typeof fn !== "function" ) {
-				throw Error( "Invalid arguments" );
-			}
+                if (c == QUOTE && ! CSV.IGNORE_QUOTES) {
+                    CSV.debug("...escaped start", c);
+                    CSV.escaped = true;
+                    CSV.state = MID_TOKEN;
+                    continue;
+                }
+                CSV.state = MID_TOKEN;
+            }
 
-			Object.keys( obj ).forEach( function ( i ) {
-				return fn.call( obj, obj[i], i );
-			});
+            // mid-token and escaped, look for sequences and end quote
+            if (CSV.state == MID_TOKEN && CSV.escaped) {
+                if (c == QUOTE) {
+                    if (str[CSV.offset] == QUOTE) {
+                        CSV.debug("...escaped quote", c);
+                        CSV.token += QUOTE;
+                        CSV.offset++;
+                    }
+                    else {
+                        CSV.debug("...escaped end", c);
+                        CSV.escaped = false;
+                        CSV.state = POST_TOKEN;
+                    }
+                }
+                else {
+                    CSV.token += c;
+                    CSV.debug("...escaped add", c, CSV.token);
+                }
+                continue;
+            }
 
-			return obj;
-		};
-	}
-	else {
-		return function ( obj, fn ) {
-			var has = Object.prototype.hasOwnProperty,
-			    i, result;
+            // fall-through: mid-token or post-token, not escaped
+            if (c == CR ) {
+                if( str[CSV.offset] == LF  )
+                    CSV.offset++;
+                else if( ! CSV.CARRIAGE_RETURN_OK )
+                    CSV.error(CSV.ERROR_CHAR);
+                CSV.token_end();
+                CSV.record_end();
+            }
+            else if (c == LF) {
+                if( ! (CSV.LINE_FEED_OK || CSV.RELAXED) )
+                    CSV.error(CSV.ERROR_CHAR);
+                CSV.token_end();
+                CSV.record_end();
+            }
+            else if (c == COMMA) {
+                CSV.token_end();
+            }
+            else if( CSV.state == MID_TOKEN ){
+                CSV.token += c;
+                CSV.debug("...add", c, CSV.token);
+            }
+            else if ( c === SPACE || c === TAB) {
+                if (! CSV.IGNORE_QUOTE_WHITESPACE )
+                    CSV.error(CSV.WARN_SPACE );
+            }
+            else if( ! CSV.RELAXED ){
+                CSV.error(CSV.ERROR_CHAR);
+            }
+        }
+        return result;
+    };
 
-			if ( typeof fn !== "function" ) {
-				throw Error( "Invalid arguments" );
-			}
+    CSV.reset = function () {
+        CSV.state = null;
+        CSV.token = null;
+        CSV.escaped = null;
+        CSV.record = null;
+        CSV.offset = null;
+        CSV.result = null;
+        CSV.str = null;
+    };
 
-			for ( i in obj ) {
-				if ( has.call( obj, i ) ) {
-					result = fn.call( obj, obj[i], i );
+    CSV.next_nonspace = function () {
+        var i = CSV.offset;
+        var c;
+        while( i < CSV.str.length ) {
+            c = CSV.str[i++];
+            if( !( c == SPACE || c === TAB ) ){
+                return c;
+            }
+        }
+        return null;
+    };
 
-					if ( result === false ) {
-						break;
-					}
-				}
-				else {
-					break;
-				}
-			}
+    CSV.record_begin = function () {
+        CSV.escaped = false;
+        CSV.record = [];
+        CSV.token_begin();
+        CSV.debug("record_begin");
+    };
 
-			return obj;
-		};
-	}
-}();
+    CSV.record_end = function () {
+        CSV.state = POST_RECORD;
+        if( ! (CSV.IGNORE_RECORD_LENGTH || CSV.RELAXED)
+            && CSV.result.length > 0 && CSV.record.length !=  CSV.result[0].length ){
+            CSV.error(CSV.ERROR_EOL);
+        }
+        CSV.result.push(CSV.record);
+        CSV.debug("record end", CSV.record);
+        CSV.record = null;
+    };
 
-/**
- * Returns the keys in an "Associative Array"
- *
- * @method keys
- * @param  {Mixed} obj Array or Object to extract keys from
- * @return {Array}     Array of the keys
- */
-var keys = function () {
-	if ( typeof Object.keys === "function" ) {
-		return function ( obj ) {
-			return Object.keys( obj );
-		};
-	}
-	else {
-		return function ( obj ) {
-			var keys = [];
+    CSV.resolve_type = function (token) {
+        if( token.match(/^\d+(\.\d+)?$/) ){
+            token = parseFloat(token);
+        }
+        else if( token.match(/^true|false$/i) ){
+            token = Boolean( token.match(/true/i) );
+        }
+        else if(token === "undefined" ){
+            token = undefined;
+        }
+        else if(token === "null" ){
+            token = null;
+        }
+        return token;
+    };
 
-			iterate( obj, function ( v, k ) {
-				keys.push( k );
-			});
+    CSV.token_begin = function () {
+        CSV.state = PRE_TOKEN;
+        // considered using array, but http://www.sitepen.com/blog/2008/05/09/string-performance-an-analysis/
+        CSV.token = "";
+    };
 
-			return keys;
-		};
-	}
-}();
+    CSV.token_end = function () {
+        if( CSV.DETECT_TYPES ) {
+            CSV.token = CSV.resolve_type(CSV.token);
+        }
+        CSV.record.push(CSV.token);
+        CSV.debug("token end", CSV.token);
+        CSV.token_begin();
+    };
 
-/**
- * Prepares input based on CSV rules
- * 
- * @method param
- * @param  {Mixed}  input     Array, Object or String
- * @param  {String} delimiter [Optional] Character to separate fields
- * @return {String}           CSV formatted String
- */
-var prepare = function ( input, delimiter ) {
-	var output;
+    CSV.debug = function (){
+        if( CSV.DEBUG )
+            console.log(arguments);
+    };
 
-	if ( input instanceof Array ) {
-		output = "\"" + input.toString() + "\"";
+    CSV.dump = function (msg) {
+        return [
+            msg , "at char", CSV.offset, ":",
+            CSV.str.substr(CSV.offset- 50, 50)
+                .replace(/\r/mg,"\\r")
+                .replace(/\n/mg,"\\n")
+                .replace(/\t/mg,"\\t")
+        ].join(" ");
+    };
 
-		if ( REGEX_OBJTYPE.test( output ) ) {
-			output = "\"" + csv( input, delimiter ) + "\"";
-		}
-	}
-	else if ( input instanceof Object ) {
-		output = "\"" + csv( input, delimiter ) + "\"";
-	}
-	else if ( REGEX_QUOTE.test( input ) ) {
-		output = "\"" + input.replace( /"/g, "\"\"" ) + "\"";
-	}
-	else {
-		output = input;
-	}
+    CSV.error = function (err){
+        var msg = CSV.dump(err);
+        CSV.reset();
+        throw msg;
+    };
 
-	return output;
-};
+    CSV.warn = function (err){
+        var msg = CSV.dump(err);
+        try {
+            console.warn( msg );
+            return;
+        } catch (e) {}
 
-// Setting version hint
-csv.version = "0.1.2";
+        try {
+            console.log( msg );
+        } catch (e) {}
 
-// CommonJS, AMD, script tag
-if ( typeof exports !== "undefined" ) {
-	module.exports = csv;
-}
-else if ( typeof define === "function" ) {
-	define( function () {
-		return csv;
-	});
-}
-else {
-	global.csv = csv;
-}
-})( this );
+    };
+
+    (function(name, context, definition) {
+            if (typeof module != 'undefined' && module.exports) module.exports = definition();
+            else if (typeof define == 'function' && typeof define.amd == 'object') define(definition);
+            else this[name] = definition();
+        }('CSV', this, function()
+            { return CSV; }
+        )
+    );
+
+})();
+
 /**
  * sifter.js
  * Copyright (c) 2013 Brian Reavis & contributors

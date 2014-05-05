@@ -33,7 +33,7 @@ paths.scripts = [
             'bower_components/pickadate/lib/picker.js'
             'bower_components/pickadate/lib/picker.date.js'
             'bower_components/pickadate/lib/picker.time.js'
-            'bower_components/csv/lib/csv.js'
+            'bower_components/csv-js/csv.js'
             'bower_components/selectize/dist/js/standalone/selectize.js'
             ]
 paths.coffee_scripts = './src/js/**/*.coffee'

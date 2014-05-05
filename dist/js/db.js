@@ -912,6 +912,9 @@ window.Box = (function() {
 
   Box.prototype.addRow = function(item) {
     var row;
+    if (this.rowByHash[item]) {
+      return;
+    }
     row = {
       columns: {},
       totals: {}
@@ -942,6 +945,10 @@ window.Box = (function() {
   Box.prototype.addToValue = function(row, col, type, value) {
     var column;
     if (!row) {
+      return;
+    }
+    if (!this.rowByHash[row]) {
+      console.log("missing item", row);
       return;
     }
     column = this.rowByHash[row]['columns'][col];

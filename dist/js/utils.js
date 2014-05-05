@@ -402,4 +402,6 @@ angular.module('app.filters').filter('localDate', function($filter) {
     }
     return $sce.trustAsHtml(string.replace(/\n/g, '<br/>'));
   };
+}).filter('encodeUri', function($window) {
+  return $window.encodeURIComponent;
 });
