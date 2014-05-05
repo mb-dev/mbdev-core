@@ -97,7 +97,7 @@ angular.module('app.services')
       readData: (appName, tableName, readDataFrom) ->
         $http.get(apiServerUrl + "/data/#{appName}/#{tableName}?" + $.param({updatedAt: readDataFrom}), {headers: {'Authorization': storageService.getToken() }})
       writeData: (appName, tableName, actions, forceServerCleanAndSaveAll = false) ->
-        $http.post("/data/#{appName}/#{tableName}?all=#{!!forceServerCleanAndSaveAll}", actions, {headers: {'Authorization': storageService.getToken() }})
+        $http.post(apiServerUrl + "/data/#{appName}/#{tableName}?all=#{!!forceServerCleanAndSaveAll}", actions, {headers: {'Authorization': storageService.getToken() }})
       checkLogin: ->
         $http.get(apiServerUrl + '/auth/check_login', {headers: {'Authorization': storageService.getToken() }})
       register: (user) ->

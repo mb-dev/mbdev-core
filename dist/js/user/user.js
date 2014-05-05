@@ -126,7 +126,7 @@ angular.module('app.services').factory('userService', function($http, storageSer
       if (forceServerCleanAndSaveAll == null) {
         forceServerCleanAndSaveAll = false;
       }
-      return $http.post("/data/" + appName + "/" + tableName + "?all=" + (!!forceServerCleanAndSaveAll), actions, {
+      return $http.post(apiServerUrl + ("/data/" + appName + "/" + tableName + "?all=" + (!!forceServerCleanAndSaveAll)), actions, {
         headers: {
           'Authorization': storageService.getToken()
         }
