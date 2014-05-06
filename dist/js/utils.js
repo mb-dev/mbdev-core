@@ -126,6 +126,7 @@ angular.module('app.services').factory('errorReporter', function() {
       defer = $q.defer();
       filer = new Filer();
       filer.init({
+        persistent: true,
         size: 1024 * 1024 * 50
       }, function(fs) {
         return filer.mkdir('/db', false, function(dirEntry) {

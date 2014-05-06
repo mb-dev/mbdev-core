@@ -59,13 +59,14 @@ angular.module('app.services')
       readFile: (fileName) ->
         defer = $q.defer()
         @setupFilesystem().then (config) ->
-          config.filer.open '/db/ ' + fileName, (file) ->
-            reader = new FileReader();
-            reader.onload = (e) ->
-              defer.resolve(reader.result)
-            read.readAsArrayBuffer(file)
-          , (err) ->
-            defer.reject(err)
+          config.filer.cd '/db', (dir) -> 
+            config.filer.open fileName, (file) ->
+              reader = new FileReader();
+              reader.onload = (e) ->
+                defer.resolve(reader.result)
+              reader.readAsText(file)
+            , (err) ->
+              defer.reject(err)
         defer.promise
       writeFile: (fileName, content) ->
         defer = $q.defer()
@@ -80,7 +81,7 @@ angular.module('app.services')
       setupFilesystem: ->
         defer = $q.defer()
         filer = new Filer();
-        filer.init {size: 1024 * 1024 * 50}, (fs) ->
+        filer.init {persistent: true, size: 1024 * 1024 * 50}, (fs) ->
           filer.mkdir '/db', false, (dirEntry) ->
             defer.resolve({fs: fs, filer: filer})
           , (err) ->
