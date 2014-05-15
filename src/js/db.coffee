@@ -395,7 +395,7 @@ class window.Database
   authenticate: =>
     defer = @$q.defer()
 
-    @userService.checkLogin().then (response) ->
+    @userService.checkLogin().then (response) =>
       @storageService.setUserDetails(response.data.user)
       defer.resolve()
     , (response) ->
@@ -448,7 +448,7 @@ class window.Database
     @$q.all(promises).then (actions) =>
       deferred.resolve(staleTableList)
     , (fail) =>
-      console.log 'fail', fail
+      console.log 'failed to read tables. Error: ', fail
       deferred.reject({data: fail.data, status: fail.status, headers: fail.headers})
 
     deferred.promise

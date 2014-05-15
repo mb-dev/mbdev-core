@@ -1,11 +1,14 @@
-ng-include(src="'/partials/common/finance_header.html'")
+ng-include(src="headerPath")
 .profile_show.container.show_page
   div.error(ng-if="error")
     {{error}}
-  .panel.panel-default.clearfix
+  .toolbar.row
+    .pull-right
+      .btn-toolbar
+        a.btn.btn-primary(href='', ng-click="downloadBackup()") Download Backup
+        a.btn.btn-primary(href='', ng-click="forceReload()") Force Refresh Tables
+  .panel.panel-default.row
     .panel-heading
-      .btns-parent.pull-right
-        a.btn.btn-default.btn-sm.edit(ng-href='/memories/{{item.id}}/edit') Edit  
       h4.panel-title View Profile
     .panel-body.as-prop-columns.col-xs-12
       .row
@@ -14,7 +17,3 @@ ng-include(src="'/partials/common/finance_header.html'")
       .row
         .left-pane E-Mail
         .right-pane {{$root.userDetails.email}}
-      .row
-        .left-pane Backup
-        .right-pane
-          a.btn.btn-primary(href='', ng-click="downloadBackup()") Download Backup

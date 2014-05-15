@@ -16,7 +16,7 @@ angular.module('app.controllers')
         response = successResponse.data
         storageService.setUserDetails(response.user)
         if storageService.getEncryptionKey()
-          $location.path('/welcome')
+          $location.path('/')
         else
           $location.path('/key')
       , (failedResponse) ->
@@ -29,18 +29,18 @@ angular.module('app.controllers')
       storageService.setUserDetails(response.user)
       delete $location.$$search.token;
       if storageService.getEncryptionKey()
-        $location.path('/welcome')
+        $location.path('/')
       else
         $location.path('/key')
     , (failedResponse) ->
-        $location.url($location.path '/login')
+        $location.url($location.path '/')
 
   .controller 'UserKeyController', ($scope, $window, storageService, $location, $q) ->
     $scope.key = ''
     storageService.setupFilesystem()
 
     if !storageService.getUserDetails()
-      $location.path('/login')
+      $location.path('/')
 
     $scope.onSubmit = ->
       storageService.setEncryptionKey($scope.key)
@@ -49,24 +49,25 @@ angular.module('app.controllers')
       , () ->
         $scope.error = 'Failed to set file system'
 
-  .controller 'UserProfileController', ($scope, $window, $location, fdb, mdb) ->
-    financeTables = Object.keys(fdb.tables)
-    memoryTables = Object.keys(mdb.tables)
-    $scope.downloadBackup = ->
-      fetchTables = -> fdb.getTables(financeTables).then(mdb.getTables(memoryTables))
-      
-      fetchTables().then ->
+  .controller 'UserProfileController', ($scope, $window, $location, $injector) ->
+    db = $injector.get('fdb') || $injector.get('mdb')
+    tables = Object.keys(db.tables)
+    $scope.downloadBackup = ->      
+      db.getTables(tables).then ->
         content = {}
-        angular.extend(content, fdb.dumpAllCollections(financeTables))
-        angular.extend(content, mdb.dumpAllCollections(memoryTables))
+        angular.extend(content, db.dumpAllCollections(tables))
 
         blob = new Blob([angular.toJson(content)], {type: 'application/json'})
 
         link = document.createElement('a')
         link.href = window.URL.createObjectURL(blob)
-        link.download = 'financeNg' + moment().valueOf().toString() + '-backup.json'
+        link.download = $scope.domain + '-' + moment().valueOf().toString() + '-backup.json'
         document.body.appendChild(link)
         link.click()
+
+    $scope.forceReload = ->
+      db.getTables(tables, true).then ->
+        $scope.showSuccess("Latest data was received from the server")
 
   .controller 'UserEditProfileController', ($scope, $window, storageService, $location) ->
     $scope.onSubmit = ->
@@ -75,11 +76,8 @@ angular.module('app.controllers')
 
   .controller 'UserLogoutController', ($scope, $window, storageService, userService, $location) ->
     if storageService.getUserDetails()
-      userService.logout().then ->
-        storageService.onLogout()
-        $location.path('/login')
-    else      
-      $location.path('/login')
+      storageService.onLogout()
+    $location.path('/')
 
 angular.module('app.services')
   .factory 'userService', ($http, storageService, $location) ->
