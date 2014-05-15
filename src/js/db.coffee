@@ -1,57 +1,3 @@
-###
-weird functions to fix issues:
-convertId = function(id) { return parseInt(id[0], 10) + id.length - 1 }
-events:
-angular.element('.list-group').injector().get('mdb').events().collection.forEach(function(item, index) { if(item.participantIds && item.participantIds[0]) { console.log(item.participantIds[0], convertId(item.participantIds[0])); } })
-angular.element('.list-group').injector().get('mdb').events().collection.forEach(function(item, index) { item.participants && item.participants.forEach(function(item, index) {item.participants[index] = parseInt(item.participants[index], 10) }) })
-angular.element('.list-group').injector().get('mdb').events().collection.forEach(function(item, index) { item.associatedMemories && item.associatedMemories.forEach(function(item, index) {item.associatedMemories[index] = parseInt(item.associatedMemories[index], 10) }) })
---
-events:
-angular.element('ng-view').injector().get('mdb').events().collection.forEach(function(item, index) { 
-  if(item.participantIds) { 
-   item.participantIds.forEach(function(association, index) {
-     item.participantIds[index] = parseInt(item.participantIds[index], 10); 
-   }) 
-  }
-  if(item.associatedMemories) {
-    item.associatedMemories.forEach(function(association, index) {
-     item.associatedMemories[index] = parseInt(item.associatedMemories[index], 10); 
-   })  
-  }
-}) 
-angular.element('ng-view').injector().get('mdb').saveTables(['events'], true)
----
-memories:
-angular.element('ng-view').injector().get('mdb').memories().collection.forEach(function(item, index) { 
- if(item.events) { 
-   item.events.forEach(function(association, index) {
-     item.events[index] = parseInt(item.events[index], 10); 
-   }) 
- }
- if(item.people) { 
-   item.people.forEach(function(association, index) {
-     item.people[index] = parseInt(item.people[index], 10); 
-   }) 
- }
- if(item.parentMemoryId) {
-    item.parentMemoryId = parseInt(item.parentMemoryId, 10);
- }
-}) 
-angular.element('ng-view').injector().get('mdb').saveTables(['memories'], true)
---
-line items:
-angular.element('.list-group').injector().get('fdb').lineItems().collection.forEach(function(item, index) { 
-   item.accountId = parseInt(item.accountId, 10);
-   item.importId = parseInt(item.importId, 10);
-})
-angular.element('.list-group').injector().get('fdb').saveTables(['lineItems'], true) 
---
-processing rules:
-angular.element('ng-view').injector().get('fdb').processingRules().collection.forEach(function(item, index) { 
-   item.id = index + 1;
-   angular.element('ng-view').injector().get('fdb').processingRules().actualCollection[item.key].id = index + 1;
-})
-###
 class window.Collection
   VERSION = '1.0'
 
@@ -200,13 +146,13 @@ class window.Collection
 
   $updateOrSet: (item, updatedAt) =>
     @correctId(item)
-    if !@idIndex[item.id]
+    if @idIndex[item.id]?
+      @collection[@idIndex[item.id]] = item      
+    else
       @collection.push(item)
       @idIndex[item.id] = @collection.length - 1
-    else
-      @collection[@idIndex[item.id]] = item
+      
     @extendItem(item)
-    item.updatedAt = updatedAt
     if updatedAt > @updatedAt
       @updatedAt = updatedAt
 
@@ -342,13 +288,8 @@ class window.Database
     @storageService = storageService
     @appName = appName
     @userService = userService
-
-    @db = {
-      user: {config: {incomeCategories: ['Income:Salary', 'Income:Dividend', 'Income:Misc']}} 
-    }
-
-  user: =>
-    @db.user
+    @db = {}
+    @user = storageService.getUserDetails()
 
   createCollection: (name, collectionInstance) =>
     @db[name] = collectionInstance
@@ -358,16 +299,31 @@ class window.Database
   fileName: (userId, tableName) ->
     "#{userId}-#{@appName}-#{tableName}.json"
 
+  createAllFiles: (tableNames) =>
+    promises = tableNames.map (tableName) =>
+      @storageService.writeFileIfNotExist(@fileName(@user.id, tableName), "")
+    @$q.all(promises)
+
   readTablesFromFS: (tableNames) =>
     promises = tableNames.map (tableName) => 
-      @storageService.readFile(@fileName(@db.user.id, tableName)).then (content) ->
-        {name: tableName, content: JSON.parse(content)}
+      @storageService.readFile(@fileName(@user.id, tableName)).then (content) =>
+        return if !content
+        content = JSON.parse(content)
+        dbModel = @db[tableName]
+        if !content.version
+          console.log('failed to load ' + tableName + ' - version missing')
+          return
+        dbModel.updatedAt = content.updatedAt
+        dbModel.collection = content.data
+        dbModel.afterLoadCollection()
+        dbModel.reExtendItems()
 
-    @$q.all(promises)
+    @$q.all(promises).then ->
+      console.log 'read data sets ', tableNames, ' from file system - resolving'
 
   writeTablesToFS: (tableNames) =>
     promises = tableNames.map (tableName) =>
-      @storageService.writeFile(@fileName(@db.user.id, tableName), angular.toJson(@collectionToStorage(tableName))).then () ->
+      @storageService.writeFile(@fileName(@user.id, tableName), angular.toJson(@collectionToStorage(tableName))).then () ->
         console.log('write', tableName, 'to FS')
       , (err) ->
         console.log('failed to write', tableName, 'to FS', err)
@@ -395,7 +351,7 @@ class window.Database
   authenticate: =>
     defer = @$q.defer()
 
-    @userService.checkLogin().then (response) ->
+    @userService.checkLogin().then (response) =>
       @storageService.setUserDetails(response.data.user)
       defer.resolve()
     , (response) ->
@@ -403,138 +359,109 @@ class window.Database
 
     defer.promise
 
+  applyActions: (tableName, dbModel, actions) =>
+    lastUpdatedAt = 0
+    dbModel.actionsLog = []
+    actions.forEach (op) =>
+      if op.action == 'update'
+        try
+          dbModel.$updateOrSet(JSON.parse(sjcl.decrypt(@storageService.getEncryptionKey(), op.item)), op.updatedAt)
+        catch err
+          console.log 'failed to decrypt', tableName, op, err
+          throw 'failed to decrypt'
+      else if op.action == 'delete'
+        dbModel.$deleteItem(op.id, op.updatedAt)
+      lastUpdatedAt = op.updatedAt
+    lastUpdatedAt
+
   readTablesFromWeb: (tableList, forceLoadAll) =>
+    if forceLoadAll    
+      @performReadData(tableList, forceLoadAll)
+    else
+      @performGetLastModified(tableList, forceLoadAll)
+
+  performGetLastModified: (tableList, forceLoadAll) =>
+    @userService.getLastModified().then (response) =>
+      @storageService.setLastModifiedDateRaw(response.data.lastModifiedDate)
+      @performReadData(tableList, forceLoadAll)
+
+  performReadData: (tableList, forceLoadAll) =>
     # which tables require reading?
     staleTableList = []
-    if forceLoadAll
-      staleTableList = tableList
-    else
-      tableList.forEach (tableName) =>
-        dbModel = @db[tableName]
-        lastModifiedServerTime = @db.user.lastModifiedDate["#{@appName}-#{tableName}"]
-        if lastModifiedServerTime && lastModifiedServerTime > dbModel.updatedAt
-          staleTableList.push(tableName)
-
-    # load them
-    deferred = @$q.defer();
-
-    promises = []
-    staleTableList.forEach (tableName) =>
-      dbModel = @db[tableName]
+    tableList.forEach (tableName) =>
       if forceLoadAll
-        dbModel.reset()
-        getDataFrom = 0
+        staleTableList.push({name: tableName, getFrom: 0 })
       else
-        getDataFrom = dbModel.updatedAt
-
+        lastModifiedServerTime = @storageService.getLastModifiedDate(@appName, tableName)
+        lastSyncDate = @storageService.getLocalLastSyncDate(@appName, tableName)
+        if lastModifiedServerTime && lastModifiedServerTime > lastSyncDate
+          staleTableList.push({name: tableName, getFrom: lastSyncDate})
+    # load them
+    promises = []  
+    staleTableList.forEach (table) =>
+      tableName = table.name
+      getDataFrom = table.getFrom
+      dbModel = @db[tableName]
       promise = @userService.readData(@appName, tableName, getDataFrom).then (response) =>
         try
-          dbModel.actionsLog = []
-          response.data.actions.forEach (op) =>
-            if op.action == 'update'
-              try
-                dbModel.$updateOrSet(JSON.parse(sjcl.decrypt(@storageService.getEncryptionKey(), op.item)), op.updatedAt)
-              catch
-                console.log 'failed to decrypt', tableName, op
-                throw 'failed to decrypt'
-            else if op.action == 'delete'
-              dbModel.$deleteItem(op.id, op.updatedAt)
+          if forceLoadAll
+            dbModel.reset()
+          if response.data.actions.length > 0
+            lastUpdatedAt = @applyActions(tableName, dbModel, response.data.actions)
+            @storageService.setLocalLastSyncDate(@appName, tableName, lastUpdatedAt)
+            @storageService.setLastModifiedDate(@appName, tableName, lastUpdatedAt)
         catch err
           console.log "error updating #{tableName} after getting response from web"
           throw err
-
       promises.push(promise)
     
     @$q.all(promises).then (actions) =>
-      deferred.resolve(staleTableList)
+      staleTableList = staleTableList.map((table) -> table.name)
+      @writeTablesToFS(staleTableList)
+      if staleTableList.length > 0
+        console.log 'stale data sets ', staleTableList, ' were updated from the web - resolving'
     , (fail) =>
-      console.log 'fail', fail
-      deferred.reject({data: fail.data, status: fail.status, headers: fail.headers})
-
-    deferred.promise
+      console.log 'failed to read tables. Error: ', fail
+      fail
 
   performGet: (tableList, options) ->
-    deferred = @$q.defer();
-    loadedDataFromFS = false
-
-    copyUserDataFromSession = =>
-      @db.user = angular.extend(@db.user, angular.copy(@storageService.getUserDetails()))
-
-    onAuthenticated = =>
-      if !@storageService.getEncryptionKey()
-        deferred.reject({data: {reason: 'missing_key'}, status: 403})
-      else
-        copyUserDataFromSession()
-        if options.initialState == 'authenticate'
-          @readTablesFromWeb(tableList).then(onReadTablesFromWeb, onFailedReadTablesFromWeb)
-        else
-          @readTablesFromFS(tableList).then(onReadTablesFromFS, onFailedReadTablesFromFS)
-
-    onFailedAuthenticate = (response) =>
-      deferred.reject(response)
-
-    onReadTablesFromWeb = (staleTables) =>
-      @writeTablesToFS(staleTables)
-      if staleTables.length > 0
-        console.log 'stale data sets ', staleTables, ' were updated from the web - resolving'
-      deferred.resolve(this)
-
-    onFailedReadTablesFromWeb = (response) =>
-      deferred.reject(response)
-
-    onReadTablesFromFS = (fileContents) =>
-      loadedDataFromFS = true
-      fileContents.forEach(loadDataSet)
-      console.log 'read data sets ', tableList, ' from file system - resolving'
-      deferred.resolve(this)
-
-    onFailedReadTablesFromFS = () =>
-      @readTablesFromWeb(tableList).then(onReadTablesFromWeb, onFailedReadTablesFromWeb)
-
-    loadDataSet = (dataSet) =>
-      dbModel = @db[dataSet.name]
-      if !dataSet.content
-        console.log('failed to load ' + dataSet.name)
-        return
-      
-      if !dataSet.content.version
-        console.log('failed to load ' + dataSet.name + ' - version missing')
-        return
-      
-      dbModel.updatedAt = dataSet.content.updatedAt
-      dbModel.collection = dataSet.content.data
-      dbModel.afterLoadCollection()
-      dbModel.reExtendItems()
-
-    if options.initialState == 'authenticate'
-      # actual getTables code start shere
-      @authenticate().then(onAuthenticated, onFailedAuthenticate)
-    else
-      copyUserDataFromSession() 
-      if !@storageService.getEncryptionKey()
-        deferred.reject({data: {reason: 'missing_key'}, status: 403})
-      else if options.initialState == 'readFromWeb'
-        @readTablesFromWeb(tableList, options.forceRefreshAll).then(onReadTablesFromWeb, onFailedReadTablesFromWeb)
-      else if options.initialState == 'readFromFS'
-        @readTablesFromFS(tableList).then(onReadTablesFromFS, onFailedReadTablesFromFS)
-  
-    deferred.promise
+    defer = @$q.defer()
+    onFailedReadTablesFromFS = (failures) =>
+      console.log('failed to read from fs: ', failures)
+      @readTablesFromWeb(tableList).then ->
+        defer.resolve()
+      , (response) ->
+        defer.reject(response)
+    
+    if !@user || !@user.id
+      console.log 'missing user'
+      defer.reject({data: {reason: 'not_logged_in'}, status: 403})
+    else if !@storageService.getEncryptionKey()
+      console.log 'missing encryption key'
+      defer.reject({data: {reason: 'missing_key'}, status: 403})
+    else if options.initialState == 'readFromWeb'
+      @readTablesFromWeb(tableList, options.forceRefreshAll).then ->
+        defer.resolve()
+      , (response) ->
+        defer.reject(response)
+    else if options.initialState == 'readFromFS'
+      @readTablesFromFS(tableList).then(angular.noop, onFailedReadTablesFromFS).then ->
+        defer.resolve()
+      , (err) -> 
+        defer.reject(err)
+    defer.promise
 
   authAndCheckData: (tableList) ->
-    @performGet(tableList, {initialState: 'authenticate', forceRefreshAll: false})
+    @performGet(tableList, {initialState: 'readFromWeb', forceRefreshAll: false})
 
   getTables: (tableList, forceRefreshAll = false) ->
     # actual getTables code start shere
-    if @storageService.isUserExists() && forceRefreshAll
+    if forceRefreshAll
       @performGet(tableList, {initialState: 'readFromWeb', forceRefreshAll: true})
-    else if @storageService.isUserExists() && !forceRefreshAll
+    else 
       @performGet(tableList, {initialState: 'readFromFS', forceRefreshAll: false})  
-    else
-      @performGet(tableList, {initialState: 'authenticate', forceRefreshAll: false})  
 
-  saveTables: (tableList, forceServerCleanAndSaveAll = false) =>
-    deferred = @$q.defer();
-    
+  saveTables: (tableList, forceServerCleanAndSaveAll = false) =>    
     promises = []
     tableList.forEach (tableName) =>
       dbModel = @db[tableName]
@@ -551,7 +478,6 @@ class window.Database
 
       promise = @userService.writeData(@appName, tableName, actions, forceServerCleanAndSaveAll).then (response) =>
         dbModel.updatedAt = response.data.updatedAt
-        @db.user.lastModifiedDate["#{@appName}-#{tableName}"] = dbModel.updatedAt
         @storageService.setLastModifiedDate(@appName, tableName, dbModel.updatedAt)
         dbModel.actionsLog = []
 
@@ -559,15 +485,13 @@ class window.Database
     
     @$q.all(promises).then (actions) =>
       @writeTablesToFS(tableList).then ->
-        deferred.resolve(true)
+        nothing = true
       , (error) ->
         console.log('failed to write files to file system', error)
-        deferred.reject('failed to write to file system')
-    , (fail) =>
-      console.log 'fail', fail
-      deferred.reject({data: fail.data, status: fail.status, headers: fail.headers})
-
-    deferred.promise
+        error
+    , (error) =>
+      console.log 'failed to write tables to the web', error
+      {data: error.data, status: error.status, headers: error.headers}
 
 class window.Box
   constructor: ->
@@ -610,6 +534,8 @@ class window.Box
     Lazy(@rowByHash[row]['columns']).pairs().map((item) -> {column: item[0], values: item[1].values }).toArray()
 
   rowTotals: (row) =>
+    if(!@rowByHash[row])
+      return {amount: new BigNumber(0)}
     @rowByHash[row]['totals']
   
   # private

@@ -1,4 +1,4 @@
-angular.module('app.services').factory('errorReporter', function() {
+angular.module('core.services', []).factory('errorReporter', function() {
   return {
     errorCallbackToScope: function($scope) {
       return function(reason) {
@@ -37,8 +37,41 @@ angular.module('app.services').factory('errorReporter', function() {
     setUserDetails: function(userDetails) {
       return amplify.store('user', userDetails);
     },
+    getLastModifiedDate: function(appName, tableName) {
+      var user;
+      user = amplify.store('user');
+      if (!user || !user.lastModifiedDate) {
+        return 0;
+      }
+      return user.lastModifiedDate["" + appName + "-" + tableName] || 0;
+    },
     setLastModifiedDate: function(appName, tableName, updatedAt) {
-      return amplify.store('user').lastModifiedDate["" + appName + "-" + tableName] = updatedAt;
+      var userDetails;
+      userDetails = amplify.store('user');
+      userDetails.lastModifiedDate["" + appName + "-" + tableName] = updatedAt;
+      return amplify.store('user', userDetails);
+    },
+    setLastModifiedDateRaw: function(data) {
+      var userDetails;
+      userDetails = amplify.store('user');
+      userDetails.lastModifiedDate = data;
+      return amplify.store('user', userDetails);
+    },
+    getLocalLastSyncDate: function(appName, tableName) {
+      var syncDate, userId;
+      userId = amplify.store('user').id;
+      syncDate = amplify.store("" + userId + "-syncDate");
+      if (!syncDate) {
+        return 0;
+      }
+      return syncDate["" + appName + "-" + tableName] || 0;
+    },
+    setLocalLastSyncDate: function(appName, tableName, updatedAt) {
+      var syncDate, userId;
+      userId = amplify.store('user').id;
+      syncDate = amplify.store('syncDate') || {};
+      syncDate["" + appName + "-" + tableName] = updatedAt;
+      return amplify.store("" + userId + "-syncDate", syncDate);
     },
     getEncryptionKey: function() {
       var userId;
@@ -58,6 +91,9 @@ angular.module('app.services').factory('errorReporter', function() {
     },
     onLogout: function() {
       var userId;
+      if (!this.isUserExists()) {
+        return;
+      }
       userId = amplify.store('user').id;
       if (!userId) {
         return;
@@ -91,13 +127,44 @@ angular.module('app.services').factory('errorReporter', function() {
       var defer;
       defer = $q.defer();
       this.setupFilesystem().then(function(config) {
-        return config.filer.open('/db/ ' + fileName, function(file) {
-          var reader;
-          reader = new FileReader();
-          reader.onload = function(e) {
-            return defer.resolve(reader.result);
-          };
-          return read.readAsArrayBuffer(file);
+        return config.filer.cd('/db', function(dir) {
+          return config.filer.open(fileName, function(file) {
+            var reader;
+            reader = new FileReader();
+            reader.onload = function(e) {
+              return defer.resolve(reader.result);
+            };
+            return reader.readAsText(file);
+          }, function(err) {
+            return defer.reject(err);
+          });
+        });
+      });
+      return defer.promise;
+    },
+    writeFileIfNotExist: function(fileName, content) {
+      var defer;
+      defer = $q.defer();
+      this.setupFilesystem().then(function(config) {
+        return config.filer.ls('/db/', function(entries) {
+          var existingFiles;
+          existingFiles = {};
+          entries.forEach(function(entry) {
+            return existingFiles[entry.name] = true;
+          });
+          if (existingFiles[fileName]) {
+            return defer.resolve();
+          } else {
+            return config.filer.write('/db/' + fileName, {
+              data: content,
+              type: 'text/plain'
+            }, function(fileEntry, fileWriter) {
+              console.log('creating file: ', fileName);
+              return defer.resolve();
+            }, function(err) {
+              return defer.reject(err);
+            });
+          }
         }, function(err) {
           return defer.reject(err);
         });
@@ -143,9 +210,72 @@ angular.module('app.services').factory('errorReporter', function() {
       return defer.promise;
     }
   };
+}).factory('userService', function($http, storageService, $location) {
+  var apiServerUrl;
+  if (Lazy($location.host()).contains('local.com')) {
+    apiServerUrl = 'http://api.moshebergman.local.com:10000';
+  } else if (Lazy($location.host()).contains('vagrant.com')) {
+    apiServerUrl = 'http://api.moshebergman.vagrant.com';
+  } else {
+    apiServerUrl = 'https://api.moshebergman.com';
+  }
+  return {
+    oauthUrl: function(domain) {
+      return apiServerUrl + '/auth/google?site=' + domain;
+    },
+    authenticate: function() {
+      return $http.get(apiServerUrl + '/data/authenticate', {
+        headers: {
+          'Authorization': storageService.getToken()
+        }
+      });
+    },
+    getLastModified: function() {
+      return $http.get(apiServerUrl + '/data/get_last_modified', {
+        headers: {
+          'Authorization': storageService.getToken()
+        }
+      });
+    },
+    readData: function(appName, tableName, readDataFrom) {
+      return $http.get(apiServerUrl + ("/data/" + appName + "/" + tableName + "?") + $.param({
+        updatedAt: readDataFrom
+      }), {
+        headers: {
+          'Authorization': storageService.getToken()
+        }
+      });
+    },
+    writeData: function(appName, tableName, actions, forceServerCleanAndSaveAll) {
+      if (forceServerCleanAndSaveAll == null) {
+        forceServerCleanAndSaveAll = false;
+      }
+      return $http.post(apiServerUrl + ("/data/" + appName + "/" + tableName + "?all=" + (!!forceServerCleanAndSaveAll)), actions, {
+        headers: {
+          'Authorization': storageService.getToken()
+        }
+      });
+    },
+    checkLogin: function() {
+      return $http.get(apiServerUrl + '/auth/check_login', {
+        headers: {
+          'Authorization': storageService.getToken()
+        }
+      });
+    },
+    register: function(user) {
+      return $http.post(apiServerUrl + '/auth/register', user);
+    },
+    login: function(user) {
+      return $http.post(apiServerUrl + '/auth/login', user);
+    },
+    logout: function() {
+      return $http.post(apiServerUrl + '/auth/logout');
+    }
+  };
 });
 
-angular.module('app.directives').directive('currencyWithSign', function($filter) {
+angular.module('core.directives', []).directive('currencyWithSign', function($filter) {
   return {
     restrict: 'E',
     link: function(scope, elm, attrs) {
@@ -198,7 +328,11 @@ angular.module('app.directives').directive('currencyWithSign', function($filter)
         return parseFloat(value);
       });
       return ngModelCtrl.$parsers.push(function(value) {
-        return value.toString();
+        if (!value) {
+          return "0";
+        } else {
+          return value.toString();
+        }
       });
     }
   };
@@ -349,7 +483,7 @@ angular.module('app.directives').directive('currencyWithSign', function($filter)
   };
 });
 
-angular.module('app.filters').filter('localDate', function($filter) {
+angular.module('core.filters', []).filter('localDate', function($filter) {
   var angularDateFilter;
   angularDateFilter = $filter('date');
   return function(theDate) {

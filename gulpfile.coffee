@@ -27,6 +27,7 @@ paths.scripts = [
             'bower_components/angular-moment/angular-moment.js'
             'bower_components/angular-typeahead/angular-typeahead.js'
             'bower_components/filer.js/src/filer.js'
+            'bower_components/sjcl/sjcl.js'
             'bower_components/angular-ui-select2/src/select2.js'
             'bower_components/checklist-model/checklist-model.js'
             'bower_components/amplify/lib/amplify.js'
@@ -73,6 +74,7 @@ gulp.task 'copy-core', ->
             
 gulp.task 'watch', ->
   gulp.watch(paths.scripts, ['build-js']);
+  gulp.watch(paths.coffee_scripts, ['build-js']);
   gulp.watch(paths.styles, ['build-css']);
   gulp.watch(paths.views, ['build-views']);
 

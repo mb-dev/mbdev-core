@@ -1,58 +1,3 @@
-
-/*
-weird functions to fix issues:
-convertId = function(id) { return parseInt(id[0], 10) + id.length - 1 }
-events:
-angular.element('.list-group').injector().get('mdb').events().collection.forEach(function(item, index) { if(item.participantIds && item.participantIds[0]) { console.log(item.participantIds[0], convertId(item.participantIds[0])); } })
-angular.element('.list-group').injector().get('mdb').events().collection.forEach(function(item, index) { item.participants && item.participants.forEach(function(item, index) {item.participants[index] = parseInt(item.participants[index], 10) }) })
-angular.element('.list-group').injector().get('mdb').events().collection.forEach(function(item, index) { item.associatedMemories && item.associatedMemories.forEach(function(item, index) {item.associatedMemories[index] = parseInt(item.associatedMemories[index], 10) }) })
---
-events:
-angular.element('ng-view').injector().get('mdb').events().collection.forEach(function(item, index) { 
-  if(item.participantIds) { 
-   item.participantIds.forEach(function(association, index) {
-     item.participantIds[index] = parseInt(item.participantIds[index], 10); 
-   }) 
-  }
-  if(item.associatedMemories) {
-    item.associatedMemories.forEach(function(association, index) {
-     item.associatedMemories[index] = parseInt(item.associatedMemories[index], 10); 
-   })  
-  }
-}) 
-angular.element('ng-view').injector().get('mdb').saveTables(['events'], true)
----
-memories:
-angular.element('ng-view').injector().get('mdb').memories().collection.forEach(function(item, index) { 
- if(item.events) { 
-   item.events.forEach(function(association, index) {
-     item.events[index] = parseInt(item.events[index], 10); 
-   }) 
- }
- if(item.people) { 
-   item.people.forEach(function(association, index) {
-     item.people[index] = parseInt(item.people[index], 10); 
-   }) 
- }
- if(item.parentMemoryId) {
-    item.parentMemoryId = parseInt(item.parentMemoryId, 10);
- }
-}) 
-angular.element('ng-view').injector().get('mdb').saveTables(['memories'], true)
---
-line items:
-angular.element('.list-group').injector().get('fdb').lineItems().collection.forEach(function(item, index) { 
-   item.accountId = parseInt(item.accountId, 10);
-   item.importId = parseInt(item.importId, 10);
-})
-angular.element('.list-group').injector().get('fdb').saveTables(['lineItems'], true) 
---
-processing rules:
-angular.element('ng-view').injector().get('fdb').processingRules().collection.forEach(function(item, index) { 
-   item.id = index + 1;
-   angular.element('ng-view').injector().get('fdb').processingRules().actualCollection[item.key].id = index + 1;
-})
- */
 var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
 
 window.Collection = (function() {
@@ -282,14 +227,13 @@ window.Collection = (function() {
 
   Collection.prototype.$updateOrSet = function(item, updatedAt) {
     this.correctId(item);
-    if (!this.idIndex[item.id]) {
+    if (this.idIndex[item.id] != null) {
+      this.collection[this.idIndex[item.id]] = item;
+    } else {
       this.collection.push(item);
       this.idIndex[item.id] = this.collection.length - 1;
-    } else {
-      this.collection[this.idIndex[item.id]] = item;
     }
     this.extendItem(item);
-    item.updatedAt = updatedAt;
     if (updatedAt > this.updatedAt) {
       return this.updatedAt = updatedAt;
     }
@@ -536,30 +480,24 @@ window.SimpleCollection = (function() {
 window.Database = (function() {
   function Database(appName, $q, storageService, userService) {
     this.saveTables = __bind(this.saveTables, this);
+    this.performReadData = __bind(this.performReadData, this);
+    this.performGetLastModified = __bind(this.performGetLastModified, this);
     this.readTablesFromWeb = __bind(this.readTablesFromWeb, this);
+    this.applyActions = __bind(this.applyActions, this);
     this.authenticate = __bind(this.authenticate, this);
     this.dumpAllCollections = __bind(this.dumpAllCollections, this);
     this.collectionToStorage = __bind(this.collectionToStorage, this);
     this.writeTablesToFS = __bind(this.writeTablesToFS, this);
     this.readTablesFromFS = __bind(this.readTablesFromFS, this);
+    this.createAllFiles = __bind(this.createAllFiles, this);
     this.createCollection = __bind(this.createCollection, this);
-    this.user = __bind(this.user, this);
     this.$q = $q;
     this.storageService = storageService;
     this.appName = appName;
     this.userService = userService;
-    this.db = {
-      user: {
-        config: {
-          incomeCategories: ['Income:Salary', 'Income:Dividend', 'Income:Misc']
-        }
-      }
-    };
+    this.db = {};
+    this.user = storageService.getUserDetails();
   }
-
-  Database.prototype.user = function() {
-    return this.db.user;
-  };
 
   Database.prototype.createCollection = function(name, collectionInstance) {
     this.db[name] = collectionInstance;
@@ -570,26 +508,48 @@ window.Database = (function() {
     return "" + userId + "-" + this.appName + "-" + tableName + ".json";
   };
 
+  Database.prototype.createAllFiles = function(tableNames) {
+    var promises;
+    promises = tableNames.map((function(_this) {
+      return function(tableName) {
+        return _this.storageService.writeFileIfNotExist(_this.fileName(_this.user.id, tableName), "");
+      };
+    })(this));
+    return this.$q.all(promises);
+  };
+
   Database.prototype.readTablesFromFS = function(tableNames) {
     var promises;
     promises = tableNames.map((function(_this) {
       return function(tableName) {
-        return _this.storageService.readFile(_this.fileName(_this.db.user.id, tableName)).then(function(content) {
-          return {
-            name: tableName,
-            content: JSON.parse(content)
-          };
+        return _this.storageService.readFile(_this.fileName(_this.user.id, tableName)).then(function(content) {
+          var dbModel;
+          if (!content) {
+            return;
+          }
+          content = JSON.parse(content);
+          dbModel = _this.db[tableName];
+          if (!content.version) {
+            console.log('failed to load ' + tableName + ' - version missing');
+            return;
+          }
+          dbModel.updatedAt = content.updatedAt;
+          dbModel.collection = content.data;
+          dbModel.afterLoadCollection();
+          return dbModel.reExtendItems();
         });
       };
     })(this));
-    return this.$q.all(promises);
+    return this.$q.all(promises).then(function() {
+      return console.log('read data sets ', tableNames, ' from file system - resolving');
+    });
   };
 
   Database.prototype.writeTablesToFS = function(tableNames) {
     var promises;
     promises = tableNames.map((function(_this) {
       return function(tableName) {
-        return _this.storageService.writeFile(_this.fileName(_this.db.user.id, tableName), angular.toJson(_this.collectionToStorage(tableName))).then(function() {
+        return _this.storageService.writeFile(_this.fileName(_this.user.id, tableName), angular.toJson(_this.collectionToStorage(tableName))).then(function() {
           return console.log('write', tableName, 'to FS');
         }, function(err) {
           return console.log('failed to write', tableName, 'to FS', err);
@@ -626,10 +586,12 @@ window.Database = (function() {
   Database.prototype.authenticate = function() {
     var defer;
     defer = this.$q.defer();
-    this.userService.checkLogin().then(function(response) {
-      this.storageService.setUserDetails(response.data.user);
-      return defer.resolve();
-    }, function(response) {
+    this.userService.checkLogin().then((function(_this) {
+      return function(response) {
+        _this.storageService.setUserDetails(response.data.user);
+        return defer.resolve();
+      };
+    })(this), function(response) {
       return defer.reject({
         data: response.data,
         status: response.status,
@@ -639,51 +601,88 @@ window.Database = (function() {
     return defer.promise;
   };
 
-  Database.prototype.readTablesFromWeb = function(tableList, forceLoadAll) {
-    var deferred, promises, staleTableList;
-    staleTableList = [];
-    if (forceLoadAll) {
-      staleTableList = tableList;
-    } else {
-      tableList.forEach((function(_this) {
-        return function(tableName) {
-          var dbModel, lastModifiedServerTime;
-          dbModel = _this.db[tableName];
-          lastModifiedServerTime = _this.db.user.lastModifiedDate["" + _this.appName + "-" + tableName];
-          if (lastModifiedServerTime && lastModifiedServerTime > dbModel.updatedAt) {
-            return staleTableList.push(tableName);
+  Database.prototype.applyActions = function(tableName, dbModel, actions) {
+    var lastUpdatedAt;
+    lastUpdatedAt = 0;
+    dbModel.actionsLog = [];
+    actions.forEach((function(_this) {
+      return function(op) {
+        var err;
+        if (op.action === 'update') {
+          try {
+            dbModel.$updateOrSet(JSON.parse(sjcl.decrypt(_this.storageService.getEncryptionKey(), op.item)), op.updatedAt);
+          } catch (_error) {
+            err = _error;
+            console.log('failed to decrypt', tableName, op, err);
+            throw 'failed to decrypt';
           }
-        };
-      })(this));
+        } else if (op.action === 'delete') {
+          dbModel.$deleteItem(op.id, op.updatedAt);
+        }
+        return lastUpdatedAt = op.updatedAt;
+      };
+    })(this));
+    return lastUpdatedAt;
+  };
+
+  Database.prototype.readTablesFromWeb = function(tableList, forceLoadAll) {
+    if (forceLoadAll) {
+      return this.performReadData(tableList, forceLoadAll);
+    } else {
+      return this.performGetLastModified(tableList, forceLoadAll);
     }
-    deferred = this.$q.defer();
+  };
+
+  Database.prototype.performGetLastModified = function(tableList, forceLoadAll) {
+    return this.userService.getLastModified().then((function(_this) {
+      return function(response) {
+        _this.storageService.setLastModifiedDateRaw(response.data.lastModifiedDate);
+        return _this.performReadData(tableList, forceLoadAll);
+      };
+    })(this));
+  };
+
+  Database.prototype.performReadData = function(tableList, forceLoadAll) {
+    var promises, staleTableList;
+    staleTableList = [];
+    tableList.forEach((function(_this) {
+      return function(tableName) {
+        var lastModifiedServerTime, lastSyncDate;
+        if (forceLoadAll) {
+          return staleTableList.push({
+            name: tableName,
+            getFrom: 0
+          });
+        } else {
+          lastModifiedServerTime = _this.storageService.getLastModifiedDate(_this.appName, tableName);
+          lastSyncDate = _this.storageService.getLocalLastSyncDate(_this.appName, tableName);
+          if (lastModifiedServerTime && lastModifiedServerTime > lastSyncDate) {
+            return staleTableList.push({
+              name: tableName,
+              getFrom: lastSyncDate
+            });
+          }
+        }
+      };
+    })(this));
     promises = [];
     staleTableList.forEach((function(_this) {
-      return function(tableName) {
-        var dbModel, getDataFrom, promise;
+      return function(table) {
+        var dbModel, getDataFrom, promise, tableName;
+        tableName = table.name;
+        getDataFrom = table.getFrom;
         dbModel = _this.db[tableName];
-        if (forceLoadAll) {
-          dbModel.reset();
-          getDataFrom = 0;
-        } else {
-          getDataFrom = dbModel.updatedAt;
-        }
         promise = _this.userService.readData(_this.appName, tableName, getDataFrom).then(function(response) {
-          var err;
+          var err, lastUpdatedAt;
           try {
-            dbModel.actionsLog = [];
-            return response.data.actions.forEach(function(op) {
-              if (op.action === 'update') {
-                try {
-                  return dbModel.$updateOrSet(JSON.parse(sjcl.decrypt(_this.storageService.getEncryptionKey(), op.item)), op.updatedAt);
-                } catch (_error) {
-                  console.log('failed to decrypt', tableName, op);
-                  throw 'failed to decrypt';
-                }
-              } else if (op.action === 'delete') {
-                return dbModel.$deleteItem(op.id, op.updatedAt);
-              }
-            });
+            if (forceLoadAll) {
+              dbModel.reset();
+            }
+            if (response.data.actions.length > 0) {
+              lastUpdatedAt = _this.applyActions(tableName, dbModel, response.data.actions);
+              _this.storageService.setLocalLastSyncDate(_this.appName, tableName, lastUpdatedAt);
+              return _this.storageService.setLastModifiedDate(_this.appName, tableName, lastUpdatedAt);
+            }
           } catch (_error) {
             err = _error;
             console.log("error updating " + tableName + " after getting response from web");
@@ -693,124 +692,72 @@ window.Database = (function() {
         return promises.push(promise);
       };
     })(this));
-    this.$q.all(promises).then((function(_this) {
+    return this.$q.all(promises).then((function(_this) {
       return function(actions) {
-        return deferred.resolve(staleTableList);
+        staleTableList = staleTableList.map(function(table) {
+          return table.name;
+        });
+        _this.writeTablesToFS(staleTableList);
+        if (staleTableList.length > 0) {
+          return console.log('stale data sets ', staleTableList, ' were updated from the web - resolving');
+        }
       };
     })(this), (function(_this) {
       return function(fail) {
-        console.log('fail', fail);
-        return deferred.reject({
-          data: fail.data,
-          status: fail.status,
-          headers: fail.headers
-        });
+        console.log('failed to read tables. Error: ', fail);
+        return fail;
       };
     })(this));
-    return deferred.promise;
   };
 
   Database.prototype.performGet = function(tableList, options) {
-    var copyUserDataFromSession, deferred, loadDataSet, loadedDataFromFS, onAuthenticated, onFailedAuthenticate, onFailedReadTablesFromFS, onFailedReadTablesFromWeb, onReadTablesFromFS, onReadTablesFromWeb;
-    deferred = this.$q.defer();
-    loadedDataFromFS = false;
-    copyUserDataFromSession = (function(_this) {
-      return function() {
-        return _this.db.user = angular.extend(_this.db.user, angular.copy(_this.storageService.getUserDetails()));
-      };
-    })(this);
-    onAuthenticated = (function(_this) {
-      return function() {
-        if (!_this.storageService.getEncryptionKey()) {
-          return deferred.reject({
-            data: {
-              reason: 'missing_key'
-            },
-            status: 403
-          });
-        } else {
-          copyUserDataFromSession();
-          if (options.initialState === 'authenticate') {
-            return _this.readTablesFromWeb(tableList).then(onReadTablesFromWeb, onFailedReadTablesFromWeb);
-          } else {
-            return _this.readTablesFromFS(tableList).then(onReadTablesFromFS, onFailedReadTablesFromFS);
-          }
-        }
-      };
-    })(this);
-    onFailedAuthenticate = (function(_this) {
-      return function(response) {
-        return deferred.reject(response);
-      };
-    })(this);
-    onReadTablesFromWeb = (function(_this) {
-      return function(staleTables) {
-        _this.writeTablesToFS(staleTables);
-        if (staleTables.length > 0) {
-          console.log('stale data sets ', staleTables, ' were updated from the web - resolving');
-        }
-        return deferred.resolve(_this);
-      };
-    })(this);
-    onFailedReadTablesFromWeb = (function(_this) {
-      return function(response) {
-        return deferred.reject(response);
-      };
-    })(this);
-    onReadTablesFromFS = (function(_this) {
-      return function(fileContents) {
-        loadedDataFromFS = true;
-        fileContents.forEach(loadDataSet);
-        console.log('read data sets ', tableList, ' from file system - resolving');
-        return deferred.resolve(_this);
-      };
-    })(this);
+    var defer, onFailedReadTablesFromFS;
+    defer = this.$q.defer();
     onFailedReadTablesFromFS = (function(_this) {
-      return function() {
-        return _this.readTablesFromWeb(tableList).then(onReadTablesFromWeb, onFailedReadTablesFromWeb);
-      };
-    })(this);
-    loadDataSet = (function(_this) {
-      return function(dataSet) {
-        var dbModel;
-        dbModel = _this.db[dataSet.name];
-        if (!dataSet.content) {
-          console.log('failed to load ' + dataSet.name);
-          return;
-        }
-        if (!dataSet.content.version) {
-          console.log('failed to load ' + dataSet.name + ' - version missing');
-          return;
-        }
-        dbModel.updatedAt = dataSet.content.updatedAt;
-        dbModel.collection = dataSet.content.data;
-        dbModel.afterLoadCollection();
-        return dbModel.reExtendItems();
-      };
-    })(this);
-    if (options.initialState === 'authenticate') {
-      this.authenticate().then(onAuthenticated, onFailedAuthenticate);
-    } else {
-      copyUserDataFromSession();
-      if (!this.storageService.getEncryptionKey()) {
-        deferred.reject({
-          data: {
-            reason: 'missing_key'
-          },
-          status: 403
+      return function(failures) {
+        console.log('failed to read from fs: ', failures);
+        return _this.readTablesFromWeb(tableList).then(function() {
+          return defer.resolve();
+        }, function(response) {
+          return defer.reject(response);
         });
-      } else if (options.initialState === 'readFromWeb') {
-        this.readTablesFromWeb(tableList, options.forceRefreshAll).then(onReadTablesFromWeb, onFailedReadTablesFromWeb);
-      } else if (options.initialState === 'readFromFS') {
-        this.readTablesFromFS(tableList).then(onReadTablesFromFS, onFailedReadTablesFromFS);
-      }
+      };
+    })(this);
+    if (!this.user || !this.user.id) {
+      console.log('missing user');
+      defer.reject({
+        data: {
+          reason: 'not_logged_in'
+        },
+        status: 403
+      });
+    } else if (!this.storageService.getEncryptionKey()) {
+      console.log('missing encryption key');
+      defer.reject({
+        data: {
+          reason: 'missing_key'
+        },
+        status: 403
+      });
+    } else if (options.initialState === 'readFromWeb') {
+      this.readTablesFromWeb(tableList, options.forceRefreshAll).then(function() {
+        return defer.resolve();
+      }, function(response) {
+        return defer.reject(response);
+      });
+    } else if (options.initialState === 'readFromFS') {
+      this.readTablesFromFS(tableList).then(angular.noop, onFailedReadTablesFromFS).then(function() {
+        return defer.resolve();
+      }, function(err) {
+        return defer.reject(err);
+      });
     }
-    return deferred.promise;
+    return defer.promise;
   };
 
   Database.prototype.authAndCheckData = function(tableList) {
     return this.performGet(tableList, {
-      initialState: 'authenticate',
+      initialState: 'readFromWeb',
       forceRefreshAll: false
     });
   };
@@ -819,30 +766,24 @@ window.Database = (function() {
     if (forceRefreshAll == null) {
       forceRefreshAll = false;
     }
-    if (this.storageService.isUserExists() && forceRefreshAll) {
+    if (forceRefreshAll) {
       return this.performGet(tableList, {
         initialState: 'readFromWeb',
         forceRefreshAll: true
       });
-    } else if (this.storageService.isUserExists() && !forceRefreshAll) {
-      return this.performGet(tableList, {
-        initialState: 'readFromFS',
-        forceRefreshAll: false
-      });
     } else {
       return this.performGet(tableList, {
-        initialState: 'authenticate',
+        initialState: 'readFromFS',
         forceRefreshAll: false
       });
     }
   };
 
   Database.prototype.saveTables = function(tableList, forceServerCleanAndSaveAll) {
-    var deferred, promises;
+    var promises;
     if (forceServerCleanAndSaveAll == null) {
       forceServerCleanAndSaveAll = false;
     }
-    deferred = this.$q.defer();
     promises = [];
     tableList.forEach((function(_this) {
       return function(tableName) {
@@ -867,33 +808,32 @@ window.Database = (function() {
         }
         promise = _this.userService.writeData(_this.appName, tableName, actions, forceServerCleanAndSaveAll).then(function(response) {
           dbModel.updatedAt = response.data.updatedAt;
-          _this.db.user.lastModifiedDate["" + _this.appName + "-" + tableName] = dbModel.updatedAt;
           _this.storageService.setLastModifiedDate(_this.appName, tableName, dbModel.updatedAt);
           return dbModel.actionsLog = [];
         });
         return promises.push(promise);
       };
     })(this));
-    this.$q.all(promises).then((function(_this) {
+    return this.$q.all(promises).then((function(_this) {
       return function(actions) {
         return _this.writeTablesToFS(tableList).then(function() {
-          return deferred.resolve(true);
+          var nothing;
+          return nothing = true;
         }, function(error) {
           console.log('failed to write files to file system', error);
-          return deferred.reject('failed to write to file system');
+          return error;
         });
       };
     })(this), (function(_this) {
-      return function(fail) {
-        console.log('fail', fail);
-        return deferred.reject({
-          data: fail.data,
-          status: fail.status,
-          headers: fail.headers
-        });
+      return function(error) {
+        console.log('failed to write tables to the web', error);
+        return {
+          data: error.data,
+          status: error.status,
+          headers: error.headers
+        };
       };
     })(this));
-    return deferred.promise;
   };
 
   return Database;
@@ -973,6 +913,11 @@ window.Box = (function() {
   };
 
   Box.prototype.rowTotals = function(row) {
+    if (!this.rowByHash[row]) {
+      return {
+        amount: new BigNumber(0)
+      };
+    }
     return this.rowByHash[row]['totals'];
   };
 

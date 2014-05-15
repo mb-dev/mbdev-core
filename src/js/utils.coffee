@@ -1,4 +1,4 @@
-angular.module('app.services')  
+angular.module('core.services', [])  
   .factory 'errorReporter', () ->
     errorCallbackToScope: ($scope) ->
       (reason) ->
@@ -25,8 +25,28 @@ angular.module('app.services')
         !!amplify.store('user')
       setUserDetails: (userDetails) ->
         amplify.store('user', userDetails)
+      getLastModifiedDate: (appName, tableName) ->
+        user = amplify.store('user')
+        return 0 if !user || !user.lastModifiedDate
+        user.lastModifiedDate["#{appName}-#{tableName}"] || 0
       setLastModifiedDate: (appName, tableName, updatedAt) ->
-        amplify.store('user').lastModifiedDate["#{appName}-#{tableName}"] = updatedAt
+        userDetails = amplify.store('user')
+        userDetails.lastModifiedDate["#{appName}-#{tableName}"] = updatedAt
+        amplify.store('user', userDetails)
+      setLastModifiedDateRaw: (data) ->
+        userDetails = amplify.store('user')
+        userDetails.lastModifiedDate = data
+        amplify.store('user', userDetails)
+      getLocalLastSyncDate: (appName, tableName) ->
+        userId = amplify.store('user').id
+        syncDate = amplify.store("#{userId}-syncDate")
+        return 0 if !syncDate
+        syncDate["#{appName}-#{tableName}"] || 0
+      setLocalLastSyncDate: (appName, tableName, updatedAt) ->
+        userId = amplify.store('user').id
+        syncDate = amplify.store('syncDate') || {}
+        syncDate["#{appName}-#{tableName}"] = updatedAt
+        amplify.store("#{userId}-syncDate", syncDate)
       getEncryptionKey: ->
         userId = amplify.store('user').id
         return null if !userId
@@ -36,6 +56,7 @@ angular.module('app.services')
         return if !userId
         amplify.store("#{userId}-encryptionKey", encryptionKey)
       onLogout: ->
+        return if !@isUserExists()
         userId = amplify.store('user').id
         return if !userId
         amplify.store("#{userId}-encryptionKey", null)
@@ -68,6 +89,25 @@ angular.module('app.services')
             , (err) ->
               defer.reject(err)
         defer.promise
+
+      writeFileIfNotExist: (fileName, content) ->
+        defer = $q.defer()
+        @setupFilesystem().then (config) ->
+          config.filer.ls '/db/', (entries) ->
+            existingFiles = {}
+            entries.forEach((entry) -> existingFiles[entry.name] = true)
+            if(existingFiles[fileName])
+              defer.resolve()
+            else
+              config.filer.write '/db/' + fileName, {data: content, type: 'text/plain'}, (fileEntry, fileWriter) ->
+                console.log 'creating file: ', fileName
+                defer.resolve()
+              , (err) ->
+                defer.reject(err)
+          , (err) ->
+            defer.reject(err)
+        defer.promise    
+
       writeFile: (fileName, content) ->
         defer = $q.defer()
         @setupFilesystem().then (config) ->
@@ -91,8 +131,36 @@ angular.module('app.services')
         defer.promise
     }
 
+  .factory 'userService', ($http, storageService, $location) ->
+    if Lazy($location.host()).contains('local.com')
+      apiServerUrl = 'http://api.moshebergman.local.com:10000'
+    else if Lazy($location.host()).contains('vagrant.com')
+      apiServerUrl = 'http://api.moshebergman.vagrant.com'
+    else
+      apiServerUrl = 'https://api.moshebergman.com'
+    {
+      oauthUrl: (domain) ->
+        apiServerUrl + '/auth/google?site=' + domain
+      authenticate: ->
+        $http.get(apiServerUrl + '/data/authenticate', {headers: {'Authorization': storageService.getToken() }})
+      getLastModified: ->
+        $http.get(apiServerUrl + '/data/get_last_modified', {headers: {'Authorization': storageService.getToken() }})
+      readData: (appName, tableName, readDataFrom) ->
+        $http.get(apiServerUrl + "/data/#{appName}/#{tableName}?" + $.param({updatedAt: readDataFrom}), {headers: {'Authorization': storageService.getToken() }})
+      writeData: (appName, tableName, actions, forceServerCleanAndSaveAll = false) ->
+        $http.post(apiServerUrl + "/data/#{appName}/#{tableName}?all=#{!!forceServerCleanAndSaveAll}", actions, {headers: {'Authorization': storageService.getToken() }})
+      checkLogin: ->
+        $http.get(apiServerUrl + '/auth/check_login', {headers: {'Authorization': storageService.getToken() }})
+      register: (user) ->
+        $http.post(apiServerUrl + '/auth/register', user)
+      login: (user) ->
+        $http.post(apiServerUrl + '/auth/login', user)
+      logout: ->
+        $http.post(apiServerUrl + '/auth/logout')
+    }
 
-angular.module('app.directives')
+
+angular.module('core.directives', [])
   .directive 'currencyWithSign', ($filter) ->
     {
       restrict: 'E',
@@ -130,7 +198,7 @@ angular.module('app.directives')
           parseFloat(value)
         
         ngModelCtrl.$parsers.push (value) ->
-          value.toString()
+          if !value then "0" else value.toString()
     }
 
   .directive 'typeFormat', ($filter) ->
@@ -245,7 +313,7 @@ angular.module('app.directives')
             searchField: 'name'
           })
 
- angular.module('app.filters')
+ angular.module('core.filters', [])
   .filter 'localDate', ($filter) ->
     angularDateFilter = $filter('date')
     (theDate) ->
