@@ -358,6 +358,9 @@ class window.Database
   fileName: (userId, tableName) ->
     "#{userId}-#{@appName}-#{tableName}.json"
 
+  createAllFiles: ->
+    @storageService.writeFile()
+    
   readTablesFromFS: (tableNames) =>
     promises = tableNames.map (tableName) => 
       @storageService.readFile(@fileName(@db.user.id, tableName)).then (content) ->
@@ -488,7 +491,8 @@ class window.Database
       console.log 'read data sets ', tableList, ' from file system - resolving'
       deferred.resolve(this)
 
-    onFailedReadTablesFromFS = () =>
+    onFailedReadTablesFromFS = (failures) =>
+      console.log(failures)
       @readTablesFromWeb(tableList).then(onReadTablesFromWeb, onFailedReadTablesFromWeb)
 
     loadDataSet = (dataSet) =>

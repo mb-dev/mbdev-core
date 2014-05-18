@@ -1,4 +1,4 @@
-angular.module('app.services')  
+angular.module('core.services', [])  
   .factory 'errorReporter', () ->
     errorCallbackToScope: ($scope) ->
       (reason) ->
@@ -91,8 +91,34 @@ angular.module('app.services')
         defer.promise
     }
 
+  .factory 'userService', ($http, storageService, $location) ->
+    if Lazy($location.host()).contains('local.com')
+      apiServerUrl = 'http://api.moshebergman.local.com:10000'
+    else if Lazy($location.host()).contains('vagrant.com')
+      apiServerUrl = 'http://api.moshebergman.vagrant.com'
+    else
+      apiServerUrl = 'https://api.moshebergman.com'
+    {
+      oauthUrl: (domain) ->
+        apiServerUrl + '/auth/google?site=' + domain
+      authenticate: ->
+        $http.get(apiServerUrl + '/data/authenticate', {headers: {'Authorization': storageService.getToken() }})
+      readData: (appName, tableName, readDataFrom) ->
+        $http.get(apiServerUrl + "/data/#{appName}/#{tableName}?" + $.param({updatedAt: readDataFrom}), {headers: {'Authorization': storageService.getToken() }})
+      writeData: (appName, tableName, actions, forceServerCleanAndSaveAll = false) ->
+        $http.post(apiServerUrl + "/data/#{appName}/#{tableName}?all=#{!!forceServerCleanAndSaveAll}", actions, {headers: {'Authorization': storageService.getToken() }})
+      checkLogin: ->
+        $http.get(apiServerUrl + '/auth/check_login', {headers: {'Authorization': storageService.getToken() }})
+      register: (user) ->
+        $http.post(apiServerUrl + '/auth/register', user)
+      login: (user) ->
+        $http.post(apiServerUrl + '/auth/login', user)
+      logout: ->
+        $http.post(apiServerUrl + '/auth/logout')
+    }
 
-angular.module('app.directives')
+
+angular.module('core.directives', [])
   .directive 'currencyWithSign', ($filter) ->
     {
       restrict: 'E',
@@ -245,7 +271,7 @@ angular.module('app.directives')
             searchField: 'name'
           })
 
- angular.module('app.filters')
+ angular.module('core.filters', [])
   .filter 'localDate', ($filter) ->
     angularDateFilter = $filter('date')
     (theDate) ->

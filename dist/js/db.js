@@ -570,6 +570,10 @@ window.Database = (function() {
     return "" + userId + "-" + this.appName + "-" + tableName + ".json";
   };
 
+  Database.prototype.createAllFiles = function() {
+    return this.storageService.writeFile();
+  };
+
   Database.prototype.readTablesFromFS = function(tableNames) {
     var promises;
     promises = tableNames.map((function(_this) {
@@ -626,10 +630,12 @@ window.Database = (function() {
   Database.prototype.authenticate = function() {
     var defer;
     defer = this.$q.defer();
-    this.userService.checkLogin().then(function(response) {
-      this.storageService.setUserDetails(response.data.user);
-      return defer.resolve();
-    }, function(response) {
+    this.userService.checkLogin().then((function(_this) {
+      return function(response) {
+        _this.storageService.setUserDetails(response.data.user);
+        return defer.resolve();
+      };
+    })(this), function(response) {
       return defer.reject({
         data: response.data,
         status: response.status,
@@ -699,7 +705,7 @@ window.Database = (function() {
       };
     })(this), (function(_this) {
       return function(fail) {
-        console.log('fail', fail);
+        console.log('failed to read tables. Error: ', fail);
         return deferred.reject({
           data: fail.data,
           status: fail.status,
@@ -766,7 +772,8 @@ window.Database = (function() {
       };
     })(this);
     onFailedReadTablesFromFS = (function(_this) {
-      return function() {
+      return function(failures) {
+        console.log(failures);
         return _this.readTablesFromWeb(tableList).then(onReadTablesFromWeb, onFailedReadTablesFromWeb);
       };
     })(this);

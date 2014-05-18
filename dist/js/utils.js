@@ -1,4 +1,4 @@
-angular.module('app.services').factory('errorReporter', function() {
+angular.module('core.services', []).factory('errorReporter', function() {
   return {
     errorCallbackToScope: function($scope) {
       return function(reason) {
@@ -91,15 +91,17 @@ angular.module('app.services').factory('errorReporter', function() {
       var defer;
       defer = $q.defer();
       this.setupFilesystem().then(function(config) {
-        return config.filer.open('/db/ ' + fileName, function(file) {
-          var reader;
-          reader = new FileReader();
-          reader.onload = function(e) {
-            return defer.resolve(reader.result);
-          };
-          return read.readAsArrayBuffer(file);
-        }, function(err) {
-          return defer.reject(err);
+        return config.filer.cd('/db', function(dir) {
+          return config.filer.open(fileName, function(file) {
+            var reader;
+            reader = new FileReader();
+            reader.onload = function(e) {
+              return defer.resolve(reader.result);
+            };
+            return reader.readAsText(file);
+          }, function(err) {
+            return defer.reject(err);
+          });
         });
       });
       return defer.promise;
@@ -143,9 +145,65 @@ angular.module('app.services').factory('errorReporter', function() {
       return defer.promise;
     }
   };
+}).factory('userService', function($http, storageService, $location) {
+  var apiServerUrl;
+  if (Lazy($location.host()).contains('local.com')) {
+    apiServerUrl = 'http://api.moshebergman.local.com:10000';
+  } else if (Lazy($location.host()).contains('vagrant.com')) {
+    apiServerUrl = 'http://api.moshebergman.vagrant.com';
+  } else {
+    apiServerUrl = 'https://api.moshebergman.com';
+  }
+  return {
+    oauthUrl: function(domain) {
+      return apiServerUrl + '/auth/google?site=' + domain;
+    },
+    authenticate: function() {
+      return $http.get(apiServerUrl + '/data/authenticate', {
+        headers: {
+          'Authorization': storageService.getToken()
+        }
+      });
+    },
+    readData: function(appName, tableName, readDataFrom) {
+      return $http.get(apiServerUrl + ("/data/" + appName + "/" + tableName + "?") + $.param({
+        updatedAt: readDataFrom
+      }), {
+        headers: {
+          'Authorization': storageService.getToken()
+        }
+      });
+    },
+    writeData: function(appName, tableName, actions, forceServerCleanAndSaveAll) {
+      if (forceServerCleanAndSaveAll == null) {
+        forceServerCleanAndSaveAll = false;
+      }
+      return $http.post(apiServerUrl + ("/data/" + appName + "/" + tableName + "?all=" + (!!forceServerCleanAndSaveAll)), actions, {
+        headers: {
+          'Authorization': storageService.getToken()
+        }
+      });
+    },
+    checkLogin: function() {
+      return $http.get(apiServerUrl + '/auth/check_login', {
+        headers: {
+          'Authorization': storageService.getToken()
+        }
+      });
+    },
+    register: function(user) {
+      return $http.post(apiServerUrl + '/auth/register', user);
+    },
+    login: function(user) {
+      return $http.post(apiServerUrl + '/auth/login', user);
+    },
+    logout: function() {
+      return $http.post(apiServerUrl + '/auth/logout');
+    }
+  };
 });
 
-angular.module('app.directives').directive('currencyWithSign', function($filter) {
+angular.module('core.directives', []).directive('currencyWithSign', function($filter) {
   return {
     restrict: 'E',
     link: function(scope, elm, attrs) {
@@ -349,7 +407,7 @@ angular.module('app.directives').directive('currencyWithSign', function($filter)
   };
 });
 
-angular.module('app.filters').filter('localDate', function($filter) {
+angular.module('core.filters', []).filter('localDate', function($filter) {
   var angularDateFilter;
   angularDateFilter = $filter('date');
   return function(theDate) {

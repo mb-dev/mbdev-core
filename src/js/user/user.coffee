@@ -1,4 +1,4 @@
-angular.module('app.controllers')
+angular.module('core.controllers', [])
    .controller 'UserLoginController', ($scope, $window, userService, storageService, $location) ->
     $scope.user = {}
 
@@ -35,7 +35,7 @@ angular.module('app.controllers')
     , (failedResponse) ->
         $location.url($location.path '/')
 
-  .controller 'UserKeyController', ($scope, $window, storageService, $location, $q) ->
+  .controller 'UserKeyController', ($scope, $window, storageService, $location, $q, db) ->
     $scope.key = ''
     storageService.setupFilesystem()
 
@@ -44,8 +44,11 @@ angular.module('app.controllers')
 
     $scope.onSubmit = ->
       storageService.setEncryptionKey($scope.key)
-      storageService.setupFilesystem().then ->
-        $location.path('/welcome')
+      storageService.setupFilesystem().then -> 
+        db.createAllFiles().then ->
+          $location.path('/welcome')
+        , () ->
+          $scope.error = 'Failed to set file system'
       , () ->
         $scope.error = 'Failed to set file system'
 
@@ -78,30 +81,3 @@ angular.module('app.controllers')
     if storageService.getUserDetails()
       storageService.onLogout()
     $location.path('/')
-
-angular.module('app.services')
-  .factory 'userService', ($http, storageService, $location) ->
-    if Lazy($location.host()).contains('local.com')
-      apiServerUrl = 'http://api.moshebergman.local.com:10000'
-    else if Lazy($location.host()).contains('vagrant.com')
-      apiServerUrl = 'http://api.moshebergman.vagrant.com'
-    else
-      apiServerUrl = 'https://api.moshebergman.com'
-    {
-      oauthUrl: (domain) ->
-        apiServerUrl + '/auth/google?site=' + domain
-      authenticate: ->
-        $http.get(apiServerUrl + '/data/authenticate', {headers: {'Authorization': storageService.getToken() }})
-      readData: (appName, tableName, readDataFrom) ->
-        $http.get(apiServerUrl + "/data/#{appName}/#{tableName}?" + $.param({updatedAt: readDataFrom}), {headers: {'Authorization': storageService.getToken() }})
-      writeData: (appName, tableName, actions, forceServerCleanAndSaveAll = false) ->
-        $http.post(apiServerUrl + "/data/#{appName}/#{tableName}?all=#{!!forceServerCleanAndSaveAll}", actions, {headers: {'Authorization': storageService.getToken() }})
-      checkLogin: ->
-        $http.get(apiServerUrl + '/auth/check_login', {headers: {'Authorization': storageService.getToken() }})
-      register: (user) ->
-        $http.post(apiServerUrl + '/auth/register', user)
-      login: (user) ->
-        $http.post(apiServerUrl + '/auth/login', user)
-      logout: ->
-        $http.post(apiServerUrl + '/auth/logout')
-      }

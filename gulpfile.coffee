@@ -73,6 +73,7 @@ gulp.task 'copy-core', ->
             
 gulp.task 'watch', ->
   gulp.watch(paths.scripts, ['build-js']);
+  gulp.watch(paths.coffee_scripts, ['build-js']);
   gulp.watch(paths.styles, ['build-css']);
   gulp.watch(paths.views, ['build-views']);
 
