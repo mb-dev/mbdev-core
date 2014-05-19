@@ -44,7 +44,7 @@ angular.module('core.services', [])
         syncDate["#{appName}-#{tableName}"] || 0
       setLocalLastSyncDate: (appName, tableName, updatedAt) ->
         userId = amplify.store('user').id
-        syncDate = amplify.store('syncDate') || {}
+        syncDate = amplify.store("#{userId}-syncDate") || {}
         syncDate["#{appName}-#{tableName}"] = updatedAt
         amplify.store("#{userId}-syncDate", syncDate)
       getEncryptionKey: ->

@@ -69,7 +69,7 @@ angular.module('core.services', []).factory('errorReporter', function() {
     setLocalLastSyncDate: function(appName, tableName, updatedAt) {
       var syncDate, userId;
       userId = amplify.store('user').id;
-      syncDate = amplify.store('syncDate') || {};
+      syncDate = amplify.store("" + userId + "-syncDate") || {};
       syncDate["" + appName + "-" + tableName] = updatedAt;
       return amplify.store("" + userId + "-syncDate", syncDate);
     },
