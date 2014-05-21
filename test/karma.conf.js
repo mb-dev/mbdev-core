@@ -92,7 +92,8 @@ module.exports = function(karma) {
       'karma-chrome-launcher',
       'karma-osx-reporter',
       'karma-coffee-preprocessor',
-      'jasmine-jquery'
+      'jasmine-jquery',
+      'karma-phantomjs-launcher'
     ],
 
 
