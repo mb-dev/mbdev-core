@@ -1,4 +1,4 @@
-# Core Library
+# Core Library [![Build Status](https://travis-ci.org/mb-dev/mbdev-core.svg?branch=master)](https://travis-ci.org/mb-dev/mbdev-core)
 
 This is the core library used by my side projects: [Finance](https://github.com/mb-dev/finance-ng) and [Journal](https://github.com/mb-dev/journal-ng). Uses AngularJS. Some features include:
 * Sync data to filesystem API (going to try IndexedDB too)
