@@ -1,6 +1,6 @@
 # Core Library
 
-This is the core library used by my side projects: [Finance](https://github.com/mb-dev/finance-ng) and [Journal](https://github.com/mb-dev/journal-ng) written in AngularJS. Some features include:
+This is the core library used by my side projects: [Finance](https://github.com/mb-dev/finance-ng) and [Journal](https://github.com/mb-dev/journal-ng). Uses AngularJS. Some features include:
 * Sync data to filesystem API (going to try IndexedDB too)
 * Common CSS
 * User API
