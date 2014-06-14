@@ -31,13 +31,27 @@ paths.scripts = [
             'bower_components/angular-ui-select2/src/select2.js'
             'bower_components/checklist-model/checklist-model.js'
             'bower_components/amplify/lib/amplify.js'
+            'bower_components/amplify/lib/amplify.store.js'
             'bower_components/pickadate/lib/picker.js'
             'bower_components/pickadate/lib/picker.date.js'
             'bower_components/pickadate/lib/picker.time.js'
             'bower_components/csv-js/csv.js'
             'bower_components/selectize/dist/js/standalone/selectize.js'
+            'bower_components/db.js/src/db.js'
+            'bower_components/rsvp/rsvp.js'
+            './src/js/extensions.js'
             ]
-paths.coffee_scripts = './src/js/**/*.coffee'
+paths.coffee_scripts = [
+            './src/js/db/box.coffee'
+            './src/js/db/syncable.coffee'
+            './src/js/db/collection.coffee'
+            './src/js/db/idb_collection.coffee'
+            './src/js/db/simple_collection.coffee'
+            './src/js/db/database.coffee'
+            './src/js/db/idb.coffee'
+            './src/js/user/user.coffee'
+            './src/js/utils.coffee'
+            ]
 
 paths.styles = [
             'bower_components/font-awesome/css/font-awesome.css'
@@ -61,6 +75,7 @@ gulp.task 'build-js', ->
     .pipe(gulp.dest('dist/js'))
   gulp.src(paths.coffee_scripts)
     .pipe(gulpif(/[.]coffee$/, coffee({bare: true}).on('error', gutil.log)))
+    .pipe(concat('core.js'))
     .pipe(gulp.dest('dist/js'))
 
 gulp.task 'build-css', ->

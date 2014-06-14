@@ -4,78 +4,94 @@ angular.module('core.services', [])
       (reason) ->
         $scope.error = "failure for reason: " + reason
 
-  .factory 'storageService', ($q) ->
+  .factory 'localStorageWrapper', ->
+    {
+      set: (key, value) ->
+        amplify.store(key, value)
+      get: (key) ->
+        amplify.store(key)
+    }
+
+  .factory 'sessionStorageWrapper', ->
+    {
+      set: (key, value) ->
+        amplify.store.sessionStorage(key, value)
+      get: (key) ->
+        amplify.store.sessionStorage(key)
+    }
+
+  .factory 'storageService', ($q, localStorageWrapper, sessionStorageWrapper) ->
     appDetails = {}
     {
       isAuthenticateTimeAndSet: ->
         shouldAuthenticate = false
-        if !amplify.store('lastAuthenticateTime') || moment().diff(moment(amplify.store('lastAuthenticateTime')), 'hours') > 1
+        if !localStorageWrapper.get('lastAuthenticateTime') || moment().diff(moment(localStorageWrapper.get('lastAuthenticateTime')), 'hours') > 1
           shouldAuthenticate = true
 
         if shouldAuthenticate
-          amplify.store('lastAuthenticateTime', moment().toISOString())
+          localStorageWrapper.set('lastAuthenticateTime', moment().toISOString())
 
         shouldAuthenticate
       getUserDetails: ->
-        amplify.store('user')
+        localStorageWrapper.get('user')
       setAppName: (appName, appDomain) ->
         appDetails = {appName: appName, appDomain: appDomain}
-        amplify.store('appDetails', appDetails)
+        localStorageWrapper.set('appDetails', appDetails)
       isUserExists: ->
-        !!amplify.store('user')
+        !!localStorageWrapper.get('user')
       setUserDetails: (userDetails) ->
-        amplify.store('user', userDetails)
+        localStorageWrapper.set('user', userDetails)
       getLastModifiedDate: (appName, tableName) ->
-        user = amplify.store('user')
+        user = localStorageWrapper.get('user')
         return 0 if !user || !user.lastModifiedDate
         user.lastModifiedDate["#{appName}-#{tableName}"] || 0
       setLastModifiedDate: (appName, tableName, updatedAt) ->
-        userDetails = amplify.store('user')
+        userDetails = localStorageWrapper.get('user')
         userDetails.lastModifiedDate["#{appName}-#{tableName}"] = updatedAt
-        amplify.store('user', userDetails)
+        localStorageWrapper.set('user', userDetails)
       setLastModifiedDateRaw: (data) ->
-        userDetails = amplify.store('user')
+        userDetails = localStorageWrapper.get('user')
         userDetails.lastModifiedDate = data
-        amplify.store('user', userDetails)
+        localStorageWrapper.set('user', userDetails)
       getLocalLastSyncDate: (appName, tableName) ->
-        userId = amplify.store('user').id
-        syncDate = amplify.store("#{userId}-syncDate")
+        userId = localStorageWrapper.get('user').id
+        syncDate = localStorageWrapper.get("#{userId}-syncDate")
         return 0 if !syncDate
         syncDate["#{appName}-#{tableName}"] || 0
       setLocalLastSyncDate: (appName, tableName, updatedAt) ->
-        userId = amplify.store('user').id
-        syncDate = amplify.store("#{userId}-syncDate") || {}
+        userId = localStorageWrapper.get('user').id
+        syncDate = localStorageWrapper.get("#{userId}-syncDate") || {}
         syncDate["#{appName}-#{tableName}"] = updatedAt
-        amplify.store("#{userId}-syncDate", syncDate)
+        localStorageWrapper.set("#{userId}-syncDate", syncDate)
       getEncryptionKey: ->
-        userId = amplify.store('user').id
+        userId = localStorageWrapper.get('user').id
         return null if !userId
-        amplify.store("#{userId}-encryptionKey")
+        localStorageWrapper.get("#{userId}-encryptionKey")
       setEncryptionKey: (encryptionKey) ->
-        userId = amplify.store('user').id
+        userId = localStorageWrapper.get('user').id
         return if !userId
-        amplify.store("#{userId}-encryptionKey", encryptionKey)
+        localStorageWrapper.set("#{userId}-encryptionKey", encryptionKey)
       onLogout: ->
         return if !@isUserExists()
-        userId = amplify.store('user').id
+        userId = localStorageWrapper.get('user').id
         return if !userId
-        amplify.store("#{userId}-encryptionKey", null)
-        amplify.store('user', null)
+        localStorageWrapper.set("#{userId}-encryptionKey", null)
+        localStorageWrapper.set('user', null)
       getToken: ->
-        amplify.store("auth-token")
+        localStorageWrapper.get("auth-token")
       setToken: (token) ->
-        amplify.store("auth-token", token)
+        localStorageWrapper.set("auth-token", token)
       getSuccessMsg: ->
-        amplify.store.sessionStorage('successMsg')
+        sessionStorageWrapper.get('successMsg')
       setSuccessMsg: (msg) ->
-        amplify.store.sessionStorage('successMsg', msg)
+        sessionStorageWrapper.set('successMsg', msg)
       getNoticeMsg: ->
-        amplify.store.sessionStorage('noticeMsg')
+        sessionStorageWrapper.get('noticeMsg')
       setNoticeMsg: (msg) ->
-        amplify.store.sessionStorage('noticeMsg', msg)
+        sessionStorageWrapper.set('noticeMsg', msg)
       clearMsgs: ->
-        amplify.store.sessionStorage('successMsg', null)
-        amplify.store.sessionStorage('noticeMsg', null)
+        sessionStorageWrapper.set('successMsg', null)
+        sessionStorageWrapper.set('noticeMsg', null)
 
       readFile: (fileName) ->
         defer = $q.defer()
@@ -157,6 +173,8 @@ angular.module('core.services', [])
         $http.post(apiServerUrl + '/auth/login', user)
       logout: ->
         $http.post(apiServerUrl + '/auth/logout')
+      getEvents: ->
+        $http.get(apiServerUrl + '/gcal/', {headers: {'Authorization': storageService.getToken() }})
     }
 
 
@@ -187,6 +205,18 @@ angular.module('core.directives', [])
         
         ngModelCtrl.$parsers.push (value) ->
           if value then moment(value).valueOf() else null
+    }
+
+  .directive 'unixDateFormat', ($filter) ->
+    dateFilter = $filter('unixLocalDate')
+    {  
+      require: 'ngModel'
+      link: (scope, element, attr, ngModelCtrl) ->
+        ngModelCtrl.$formatters.unshift (value) ->
+          if value then dateFilter(value) else ''
+        
+        ngModelCtrl.$parsers.push (value) ->
+          if value then moment(value).unix() else null
     }
 
   .directive 'floatToString', ($filter) ->
@@ -302,6 +332,15 @@ angular.module('core.directives', [])
               value: input
               text: input
           })
+        else if attrs.selectize == 'strings'
+          allItems = scope.$eval(attrs.allItems)
+          if allItems
+            alteredAllItems = allItems.map (item) -> {value: item, text: item} 
+          $(element).selectize({
+            persist: false
+            sortField: 'text'
+            options: alteredAllItems
+          })
         else if attrs.selectize == 'objectsWithIdName'
           ngModel.$parsers.push (value) ->
             value.map (item) -> parseInt(item, 10)
@@ -318,6 +357,11 @@ angular.module('core.directives', [])
     angularDateFilter = $filter('date')
     (theDate) ->
       angularDateFilter(theDate, 'MM/dd/yyyy')
+
+  .filter 'unixLocalDate', ($filter) ->
+    angularDateFilter = $filter('date')
+    (theDate) ->
+      angularDateFilter(new Date(theDate * 1000), 'MM/dd/yyyy')
 
   .filter 'monthDay', ($filter) ->
     angularDateFilter = $filter('date')
@@ -341,12 +385,22 @@ angular.module('core.directives', [])
     (typeInt) ->
       if typeInt == LineItemCollection.EXPENSE then 'Expense' else 'Income'
 
-   .filter 'bnToFixed', ($window) ->
-     (value, format) -> 
+  .filter 'bnToFixed', ($window) ->
+    (value, format) -> 
       if (typeof value == 'undefined' || value == null)
         return ''
 
       value.toFixed(2)
+
+  .filter 'unixDateFormat', ->
+    (value, format) ->
+      if (typeof value == 'undefined' || value == null)
+        return '';  
+
+      if (!isNaN(parseFloat(value)) && isFinite(value))
+        value = new Date(parseInt(value, 10));
+
+      moment.unix(value).format(format);
 
   .filter 'joinBy', () ->
     (input, delimiter) ->

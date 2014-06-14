@@ -1,0 +1,49 @@
+class window.Box
+  constructor: ->
+    @rows = []
+    @rowByHash = {}
+  
+  addRow: (item) ->
+    return if @rowByHash[item]
+    row = {columns: {}, totals: {}}
+    @rows.push row
+    @rowByHash[item] = row
+  
+  setColumns: (columns, valueTypes) ->
+    Lazy(@rows).each (row) ->
+      Lazy(columns).each (colValue) ->
+        column = row['columns'][colValue] = {}
+        column['values'] = {}
+        Lazy(valueTypes).each (type) ->
+          column['values'][type] ?= new BigNumber(0)
+      Lazy(valueTypes).each (type) ->
+        row['totals'][type] = new BigNumber(0)
+      
+
+  setValues: (row, col, type, value) ->
+
+  addToValue: (row, col, type, value) ->
+    return if !row
+    if !@rowByHash[row]
+      console.log("missing item", row)
+      return
+    column = @rowByHash[row]['columns'][col]
+    column['values'][type] = column['values'][type].plus(value)
+    @rowByHash[row]['totals'][type] = @rowByHash[row]['totals'][type].plus(value)
+  
+  columnAmount: ->
+    @rows[0]['values'].length
+  
+  rowColumnValues: (row) =>
+    return [] if !@rowByHash[row]
+    Lazy(@rowByHash[row]['columns']).pairs().map((item) -> {column: item[0], values: item[1].values }).toArray()
+
+  rowTotals: (row) =>
+    if(!@rowByHash[row])
+      return {amount: new BigNumber(0)}
+    @rowByHash[row]['totals']
+  
+  # private
+  columnValues = (column) ->
+    return 0 if column.blank?
+    column['values'] || 0
