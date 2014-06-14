@@ -183,7 +183,7 @@ window.Collection = (function() {
       throw 'not found';
     }
     this.collection.splice(this.idIndex[itemId], 1);
-    delete this.idIndex[itemId];
+    this.$buildIndex();
     if (!loadingProcess) {
       this.actionsLog.push({
         action: 'delete',

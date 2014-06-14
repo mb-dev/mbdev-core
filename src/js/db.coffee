@@ -114,7 +114,7 @@ class window.Collection
   deleteById: (itemId, loadingProcess) =>
     throw 'not found' if @idIndex[itemId] == undefined
     @collection.splice(@idIndex[itemId], 1)
-    delete @idIndex[itemId]
+    @$buildIndex()
     if !loadingProcess
       @actionsLog.push({action: 'delete', id: itemId})
       @onModified()
