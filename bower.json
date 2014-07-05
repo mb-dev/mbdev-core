@@ -32,7 +32,8 @@
     "font-awesome": "~4.1.0",
     "amplify": "~1.1.2",
     "csv-js": "*",
-    "rsvp": "*"
+    "rsvp": "*",
+    "filer.js": "~0.4.3"
   },
   "license": "MIT",
   "private": true,
