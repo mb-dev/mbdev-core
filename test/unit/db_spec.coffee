@@ -102,11 +102,8 @@ describe 'Database', ->
       root.$httpBackend.verifyNoOutstandingExpectation();
       root.$httpBackend.verifyNoOutstandingRequest();
   ))
-  afterEach (done) ->
-    setTimeout -> 
-      root.verifyNoMoreOutstandingRequests()
-      done()
-    , 0
+  afterEach ->
+    root.verifyNoMoreOutstandingRequests()
   describe 'getTables when logged in', ->
     beforeEach ->
       root.storageService.set('user', {id: root.userId, email: 'a@a.com', lastModifiedDate: {'finance-people': root.timeNow}})
@@ -125,23 +122,54 @@ describe 'Database', ->
       db.getTables([root.tableName]).then ->
         expect(testCollection.getAll().toArray()).toEqual([{id: 1, name: 'Moshe', updatedAt: root.timeNow}])
         expect(root.fileSystemContent[root.fileSystemFileName]).toEqual(angular.toJson(root.storageContent))
-        done()
+        setTimeout((->done()), 0)
       , ->
         expect("Got Error").toFail()
-        done()  
+        setTimeout((->done()), 0)
       root.$httpBackend.flush()
     it 'should load data from the file system when file system has data', (done) ->
+      console.log 'start - should load data from the file system when file system has data'
       root.fileSystemContent[root.fileSystemFileName] = angular.toJson(root.storageContent)
       db = new Database(root.appName, root.$q, root.storageService, root.userService)
       testCollection = db.createCollection(root.tableName, new Collection(root.$q, 'name'))
       db.getTables([root.tableName]).then -> 
         expect(testCollection.getAll().toArray()).toEqual([{id: 1, name: 'Moshe', updatedAt: root.timeNow}])
-        done()
+        setTimeout((->done()), 0)
       , () ->
         expect("got error").toFail()
         done()
+    it 'should load data for indexedDB collection', (done) ->
+      console.log 'start should load data for indexedDB collection'
+      db = new IndexedDbDatabase(root.appName, root.$q, root.storageService, root.userService)
+      root.testCollection = db.createCollection(root.tableName, new IndexedDbCollection('finance', 'items'))
+      root.testCollection.createDatabase({
+        items:
+          key: { keyPath: 'id' }
+          indexes:
+            id: {}
+      }).then ->
+        root.testCollection.clearAll().then ->
+          root.$httpBackend.when('GET', root.getLastModifiedUrl).respond({lastModifiedDate: root.authenticateOkResponseDataOk.user.lastModifiedDate})
+          root.$httpBackend.expectGET(root.getLastModifiedUrl)
+          root.getURL += '?updatedAt=0'
+          root.getResponse.actions.push { action: 'update', id: 1, item: sjcl.encrypt(root.encryptionKey, angular.toJson(root.storageContent.data[0])), updatedAt: root.timeNow }
+          root.$httpBackend.when('GET', root.getURL).respond(root.getResponse)
+          root.$httpBackend.expectGET(root.getURL)
+          # test      
+          db.getTables([root.tableName]).then ->
+            root.testCollection.getAll().then (items) ->
+              expect(items.length).toEqual(1)
+              setTimeout((->done()), 0)
+            , ->
+              expect("Got Error").toFail()
+              setTimeout((->done()), 0)
+          , ->
+            expect("Got Error").toFail()
+            setTimeout((->done()), 0)
+          root.$httpBackend.flush()
   describe 'saveTables', ->
     it 'should save to the server', (done) ->
+      console.log 'start - should save to the server'
       # setup user and data
       root.storageService.set('user', {id: root.userId, email: 'a@a.com', lastModifiedDate: {'finance-people': root.timeNow}})
       root.fileSystemContent[root.fileSystemFileName] = angular.toJson(root.storageContent)
@@ -159,18 +187,48 @@ describe 'Database', ->
           # expect data to be saved to fs and web
           expect(JSON.parse(root.fileSystemContent[root.fileSystemFileName]).data[1].name).toEqual('David')
           expect(root.storageService.getLastModifiedDate('finance', 'people')).toEqual(root.timeNewerData)
-          done()
+          setTimeout((->done()), 0)
         , ->
           expect("got error").toFail()
-          done()
+          setTimeout((->done()), 0)
         setTimeout((->root.$httpBackend.flush()), 0)
       , ->
         expect("got error").toFail()
         done()
       root.$rootScope.$apply()
 
+    it 'IndexedDB should save to the server', (done) ->
+      console.log 'start - IndexedDB should save to the server'
+      # setup user and data
+      root.storageService.set('user', {id: root.userId, email: 'a@a.com', lastModifiedDate: {'finance-people': root.timeNow}})
+      # setup db
+      db = new IndexedDbDatabase(root.appName, root.$q, root.storageService, root.userService)
+      root.testCollection = db.createCollection(root.tableName, new IndexedDbCollection('finance', 'items'))
+      root.testCollection.createDatabase({
+        items:
+          key: { keyPath: 'id' }
+          indexes:
+            id: {}
+      }).then ->
+        # now prepare data to be saved
+        root.testCollection.insert({name: 'David'}).then ->
+          root.postURL = root.getURL + '?all=false'
+          root.$httpBackend.expectPOST(root.postURL)
+          # perform test
+          db.saveTables([root.tableName]).then -> 
+            # expect data to be saved to fs and web
+            expect(root.storageService.getLastModifiedDate('finance', 'people')).toEqual(root.timeNewerData)
+            setTimeout((->done()), 0)
+          , ->
+            expect("got error").toFail()
+            setTimeout((->done()), 0)
+          setTimeout((->root.$httpBackend.flush()), 0)
+      , ->
+        expect("got error").toFail()
+        done()
   describe 'authAndCheckData', ->
     it 'should get data when there is data and the data is stale', (done) ->
+      console.log 'start - should get data when there is data and the data is stale'
       # setup database
       root.storageService.set('user', {id: root.userId, email: 'a@a.com', lastModifiedDate: {'finance-people': root.timeNow}})
 
@@ -196,14 +254,44 @@ describe 'Database', ->
           # check file system does not have the deleted entry and that collection matches the new data
           expect(JSON.parse(root.fileSystemContent[root.fileSystemFileName]).data[0].name).toEqual('David')
           expect(testCollection.getAll().toArray()).toEqual([{id: 2, name: 'David', updatedAt: root.timeNewerData}])
-          done()
+          setTimeout((->done()), 0)
         , ->
           expect("got error").toFail()
-          done()
+          setTimeout((->done()), 0)
         setTimeout((->root.$httpBackend.flush()), 0)
       , ->
         expect("got error").toFail()
         done()
+    it 'should get data when there is data and the data is stale from indexeddb', (done) ->
+      root.storageService.set('user', {id: root.userId, email: 'a@a.com', lastModifiedDate: {'finance-people': root.timeNow}})
+      db = new IndexedDbDatabase(root.appName, root.$q, root.storageService, root.userService)
+      root.testCollection = db.createCollection(root.tableName, new IndexedDbCollection('finance', 'items'))
+      root.testCollection.createDatabase({
+        items:
+          key: { keyPath: 'id' }
+          indexes:
+            id: {}
+      }).then ->
+        root.testCollection.clearAll().then ->
+          root.testCollection.insert({id: 1, name: 'Moshe', updatedAt: root.timeNow}).then ->
+            # setup authenticate request
+            root.storageService.setLocalLastSyncDate(root.appName, root.tableName, root.timeNow)
+            root.$httpBackend.when('GET', root.getLastModifiedUrl).respond({lastModifiedDate: root.authenticateOkResponseDataStale.user.lastModifiedDate})
+            root.$httpBackend.expectGET(root.getLastModifiedUrl)
+            # setup newer data
+            root.getURL += '?updatedAt=' + root.timeNow
+            root.getResponse.actions.push { action: 'delete', id: 1, updatedAt: root.timeNow }
+            root.getResponse.actions.push { action: 'update', id: 2, item: sjcl.encrypt(root.encryptionKey, angular.toJson({id: 2, name: 'David', updatedAt: root.timeNewerData})), updatedAt: root.timeNewerData }
+            root.$httpBackend.when('GET', root.getURL).respond(root.getResponse)
+            root.$httpBackend.expectGET(root.getURL)
+
+            promise = db.getTables([root.tableName]).then ->
+              root.testCollection.getAll().then (results) ->
+                expect(results.length).toEqual(1)
+                expect(results[0].name).toEqual('David')
+                setTimeout((->done()), 0)
+            setTimeout((->root.$httpBackend.flush()), 0)
+
     it 'should not get data when there is no stale data', (done) ->
       # setup database
       root.storageService.set 'user', {id: root.userId, email: 'a@a.com', lastModifiedDate: {'finance-people': root.timeNow}}
@@ -222,10 +310,10 @@ describe 'Database', ->
         db.authAndCheckData([root.tableName]).then ->
           # check that collection is still the same
           expect(testCollection.getAll().toArray()).toEqual([{id: 1, name: 'Moshe', updatedAt: root.timeNow}])
-          done()
+          setTimeout((->done()), 0)
         , ->
           expect("got error").toFail()
-          done()
+          setTimeout((->done()), 0)
         setTimeout((->root.$httpBackend.flush()), 0)
       , ->
         expect("got error").toFail()
@@ -238,19 +326,30 @@ describe 'Database', ->
       # perform test
       db.authAndCheckData([root.tableName]).then (value) -> 
         expect("this should have failed").toFail()
-        done()  
+        setTimeout((->done()), 0)  
       , (response) ->
         # check that we failed
         expect(response.data).toEqual({reason: 'not_logged_in'})
-        done()
+        setTimeout((->done()), 0)
       root.$rootScope.$apply()
 
 describe 'Collection', ->
   beforeEach(module('core.services'))
   beforeEach inject ($httpBackend, $http, $q, $rootScope) ->
+    root.$rootScope = $rootScope
     root.timeNow = Date.now()
     root.db = new Database(root.appName, root.$q, root.storageService, root.userService)
     root.testCollection = root.db.createCollection(root.tableName, new Collection(root.$q, 'id'))
+  describe 'deleteById', ->
+    it 'should delete two items', ->
+      root.testCollection.insert({name: 'Moshe'})
+      firstId = root.testCollection.lastInsertedId
+      root.testCollection.insert({name: 'David'})
+      secondId = root.testCollection.lastInsertedId
+      root.$rootScope.$apply()
+      root.testCollection.deleteById(firstId)
+      root.testCollection.deleteById(secondId)
+      expect(root.testCollection.collection.length).toEqual(0)
   describe 'updateAndSet', ->
     it 'should not add new item when it was only updated', ->
       root.testCollection.insert({name: 'Daniel'})  
@@ -258,6 +357,7 @@ describe 'Collection', ->
       root.testCollection.afterLoadCollection()  
       root.testCollection.$updateOrSet(root.testCollection.collection[0], root.testCollection.collection[0].updatedAt + 1)
       expect(root.testCollection.collection.length).toEqual(1)
+
 describe 'SimpleCollection', ->
   beforeEach(module('core.services'))
   beforeEach inject ($httpBackend, $http, $q, $rootScope) ->
@@ -304,6 +404,45 @@ describe 'SimpleCollection', ->
     expect(root.testCollection.collection.length).toEqual(1)
     expect(root.testCollection.get('item')).toEqual(undefined)
     expect(root.testCollection.get('item2')).toEqual(true)
+
+describe 'IndexedDbCollection', ->
+  releaseQResolve = -> setTimeout((-> root.$rootScope.$apply()), 10)
+  beforeEach(module('core.services'))
+  beforeEach (done) ->
+    inject ($httpBackend, $http, $q, $rootScope) ->
+      root.timeNow = Date.now()
+      root.$q = $q
+      root.$rootScope = $rootScope
+      root.db = new Database(root.appName, root.$q, root.storageService, root.userService)
+      root.testCollection = new IndexedDbCollection('test', 'items', root.$q)
+      root.testCollection.createDatabase({
+        items:
+          key: { keyPath: 'id' }
+          indexes:
+            id: {}
+            date: {}
+            gcalId: {}
+      }).then(done)
+  afterEach (done) ->
+    root.testCollection.clearAll().then -> 
+      done()
+    , ->
+      console.log 'failed to clear all'
+  it 'should allow inserting single item', (done) ->
+    root.testCollection.insert({name: 'test'}).then ->
+      id = root.testCollection.lastIssuedId
+      root.testCollection.findById(id).then (result) ->
+        expect(result.name).toEqual('test')
+        done()
+      , -> console.log('fail to find by id')
+    , -> console.log('fail to insert item')
+  it 'should allow inserting multiple items', (done) ->
+    root.testCollection.insertMultiple([{name: 'test1'}, {name: 'test2'}]).then ->
+      root.testCollection.getAll().then (results) ->  
+        expect(results.length).toEqual(2)
+        done()
+      , -> console.log('fail to get all')
+    , -> console.log('fail to insert multiple items')
 
 describe 'Box', ->
   it 'should allow setting values', ->

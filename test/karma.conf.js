@@ -29,12 +29,9 @@ module.exports = function(karma) {
 
     // list of files / patterns to load in the browser
     files: [
-      'http://cdn.jsdelivr.net/sjcl/1.0.0/sjcl.js',
       // Program files
       'dist/js/vendor.js',
-      'dist/js/utils.js',
-      'dist/js/db.js',
-      'dist/js/user/user.js',
+      'dist/js/core.js',
       'test/unit/**/*_spec.*'
     ],
 
@@ -92,8 +89,8 @@ module.exports = function(karma) {
       'karma-chrome-launcher',
       'karma-osx-reporter',
       'karma-coffee-preprocessor',
-      'jasmine-jquery',
-      'karma-phantomjs-launcher'
+      'karma-phantomjs-launcher',
+      'karma-firefox-launcher'
     ],
 
 
