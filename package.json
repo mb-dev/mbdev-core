@@ -9,15 +9,17 @@
     "url": "https://github.com/mb-dev/mbdev-core"
   },
   "dependencies": {
-    "gulp-util": "~2.2.14",
-    "gulp": "~3.6.2",
-    "gulp-jade": "~0.4.1",
-    "gulp-coffee": "~1.4.1",
-    "gulp-less": "~1.2.1",
-    "gulp-if": "0.0.5",
-    "gulp-debug": "~0.2.0",
-    "gulp-concat": "~2.1.7",
-    "coffee-script": "~1.7.1"
+    "coffee-script": "~1.7.1",
+
+    "gulp": "~3.8.5",
+    "gulp-jade": "~0.6.1",
+    "gulp-coffee": "~2.0.1",
+    "gulp-less": "~1.2.3",
+    "gulp-if": "1.2.1",
+    "gulp-debug": "~0.3.0",
+    "gulp-concat": "floridoo/gulp-concat#sourcemap_pipe2",
+    "gulp-sourcemaps": "^0.4.4",
+    "gulp-util": "~2.2.14"
   },
   "devDependencies": {
     "karma": "^0.12.16",
