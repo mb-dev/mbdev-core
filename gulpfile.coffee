@@ -17,7 +17,7 @@ paths.scripts = [
             'bower_components/moment/moment.js',
             'bower_components/bignumber.js/bignumber.js',
             'bower_components/lazy.js/lazy.js',
-            'bower_components/typeahead.js/dist/typeahead.js'
+            'bower_components/typeahead.js/dist/typeahead.bundle.min.js'
             'bower_components/angular/angular.min.js'
             'bower_components/angular-mocks/angular-mocks.js'
             'bower_components/angular-route/angular-route.min.js'
