@@ -862,6 +862,9 @@ window.Database = (function() {
     var promises;
     promises = tableNames.map((function(_this) {
       return function(tableName) {
+        if (_this.db[tableName].collection.length > 0) {
+          return null;
+        }
         return _this.storageService.readFile(_this.fileName(_this.user.id, tableName)).then(function(content) {
           var dbModel;
           if (!content) {

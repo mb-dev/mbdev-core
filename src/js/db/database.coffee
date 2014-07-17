@@ -22,6 +22,8 @@ class window.Database
 
   readTablesFromFS: (tableNames) =>
     promises = tableNames.map (tableName) => 
+      if(@db[tableName].collection.length > 0)
+        return null
       @storageService.readFile(@fileName(@user.id, tableName)).then (content) =>
         return if !content
         content = JSON.parse(content)
