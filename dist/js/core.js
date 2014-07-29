@@ -1669,11 +1669,11 @@ angular.module('core.services', []).factory('errorReporter', function() {
 }).factory('userService', function($http, storageService, $location) {
   var apiServerUrl;
   if (Lazy($location.host()).contains('local.com')) {
-    apiServerUrl = 'http://api.moshebergman.local.com:10000';
+    apiServerUrl = 'http://api.moshebergman.local.com:10000/api/core';
   } else if (Lazy($location.host()).contains('vagrant.com')) {
-    apiServerUrl = 'http://api.moshebergman.vagrant.com';
+    apiServerUrl = 'http://api.moshebergman.vagrant.com/api/core';
   } else {
-    apiServerUrl = 'https://api.moshebergman.com';
+    apiServerUrl = 'https://api.moshebergman.com/api/core';
   }
   return {
     oauthUrl: function(domain) {
