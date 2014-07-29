@@ -16,9 +16,9 @@ describe 'Database', ->
     root.userId = '52acfdc87d75a5a83e000001'
     root.fileSystemFileName = root.userId + '-finance-people.json'
     root.tableName = 'people'
-    root.authenticateURL = 'https://api.moshebergman.com/auth/check_login'
-    root.getLastModifiedUrl = 'https://api.moshebergman.com/data/get_last_modified'
-    root.getURL = 'https://api.moshebergman.com/data/finance/people'
+    root.authenticateURL = 'https://api.moshebergman.com/api/core/auth/check_login'
+    root.getLastModifiedUrl = 'https://api.moshebergman.com/api/core/data/get_last_modified'
+    root.getURL = 'https://api.moshebergman.com/api/core/data/finance/people'
     root.authenticateOkResponseDataStale = {user: {id: root.userId, email: 'a@a.com', lastModifiedDate: {'finance-people': root.timeNewerData} }}
     root.authenticateOkResponseDataOk = {user: {id: root.userId, email: 'a@a.com', lastModifiedDate: {'finance-people': root.timeNow} }}
     root.getResponse = {actions: []}
