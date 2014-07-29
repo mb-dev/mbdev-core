@@ -26,6 +26,7 @@ paths.scripts = [
             'bower_components/angular-cookies/angular-cookies.js'
             'bower_components/angular-moment/angular-moment.js'
             'bower_components/angular-typeahead/angular-typeahead.js'
+            'bower_components/angular-strap/dist/angular-strap.js'
             'bower_components/filer.js/src/filer.js'
             'bower_components/sjcl/sjcl.js'
             'bower_components/angular-ui-select2/src/select2.js'

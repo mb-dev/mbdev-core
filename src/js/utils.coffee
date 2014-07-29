@@ -149,11 +149,11 @@ angular.module('core.services', [])
 
   .factory 'userService', ($http, storageService, $location) ->
     if Lazy($location.host()).contains('local.com')
-      apiServerUrl = 'http://api.moshebergman.local.com:10000'
+      apiServerUrl = 'http://api.moshebergman.local.com:10000/api/core'
     else if Lazy($location.host()).contains('vagrant.com')
-      apiServerUrl = 'http://api.moshebergman.vagrant.com'
+      apiServerUrl = 'http://api.moshebergman.vagrant.com/api/core'
     else
-      apiServerUrl = 'https://api.moshebergman.com'
+      apiServerUrl = 'https://api.moshebergman.com/api/core'
     {
       oauthUrl: (domain) ->
         apiServerUrl + '/auth/google?site=' + domain
@@ -261,23 +261,9 @@ angular.module('core.directives', [])
         , (newValue) ->
           if newValue && !initialized
             element.pickadate({
+              container: 'body',
               format: 'mm/dd/yyyy'
             })
-            # picker = element.pickadate('picker')
-            # $inputText = element.on(
-            #   change: ->
-            #     parsedDate = Date.parse(@value)
-            #     if parsedDate
-            #       picker.set "select", [parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate()]
-            #     else
-            #       alert("Invalid date")
-            #   focus: ->
-            #     picker.open(false)
-            #   blur: ->
-            #     picker.close()
-            # )
-            # picker.on "set", ->
-            #   element.val(@get("value"))
             initialized = true
         )
     }

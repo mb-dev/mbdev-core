@@ -1859,6 +1859,7 @@ angular.module('core.directives', []).directive('currencyWithSign', function($fi
       }, function(newValue) {
         if (newValue && !initialized) {
           element.pickadate({
+            container: 'body',
             format: 'mm/dd/yyyy'
           });
           return initialized = true;
