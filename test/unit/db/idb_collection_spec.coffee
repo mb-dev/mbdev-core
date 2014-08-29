@@ -9,15 +9,19 @@ describe 'IndexedDbCollection', ->
       root.$q = $q
       root.$rootScope = $rootScope
       root.db = new Database(root.appName, root.$q, root.storageService, root.userService)
-      root.testCollection = new IndexedDbCollection('test', 'items', root.$q)
+      root.testCollection = new IndexedDbCollection('test', 'items')
       root.testCollection.createDatabase({
-        items:
-          key: { keyPath: 'id' }
-          indexes:
-            id: {}
-            date: {}
-            gcalId: {}
-      }).then(done)
+      items:
+        key: { keyPath: 'id' }
+        indexes:
+          id: {}
+          date: {}
+          gcalId: {}
+      categories:
+        key: { keyPath: 'id' }
+        indexes:
+          id: {}
+    }).then(done)
   afterEach (done) ->
     root.testCollection.clearAll().then -> 
       done()

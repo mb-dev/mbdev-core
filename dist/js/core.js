@@ -410,6 +410,7 @@ window.IndexedDbCollection = (function(_super) {
     this.clearAll = __bind(this.clearAll, this);
     this.insertMultiple = __bind(this.insertMultiple, this);
     this.insert = __bind(this.insert, this);
+    this.createDatabase = __bind(this.createDatabase, this);
     this.getAvailableId = __bind(this.getAvailableId, this);
     this.collectionName = collectionName;
     this.appName = appName;
@@ -441,7 +442,7 @@ window.IndexedDbCollection = (function(_super) {
           return resolve();
         }).fail(function(err) {
           console.log(err);
-          return fail();
+          return reject();
         });
       };
     })(this));
@@ -523,12 +524,12 @@ window.IndexedDbCollection = (function(_super) {
     })(this));
   };
 
-  IndexedDbCollection.prototype.deleteById = function(item, loadingProcess) {
+  IndexedDbCollection.prototype.deleteById = function(itemId, loadingProcess) {
     return new RSVP.Promise((function(_this) {
       return function(resolve, reject) {
-        return _this.dba[_this.collectionName].remove(item.id).then(function() {
+        return _this.dba[_this.collectionName].remove(itemId).then(function() {
           if (!loadingProcess) {
-            _this.onDelete(item);
+            _this.onDelete(itemId);
           }
           return resolve();
         }, reject);
@@ -581,20 +582,123 @@ window.IndexedDbCollection = (function(_super) {
 
   IndexedDbCollection.prototype.$deleteItem = function(itemId, updatedAt) {
     var promise;
-    promise = this.deleteById({
-      id: itemId
-    }, true);
+    promise = this.deleteById(itemId, true);
     if (updatedAt > this.updatedAt) {
       this.updatedAt = updatedAt;
     }
     return promise;
   };
 
-  IndexedDbCollection.prototype.afterLoadCollection = function() {};
+  IndexedDbCollection.prototype.afterLoadCollection = function() {
+    var deferred;
+    deferred = RSVP.defer();
+    deferred.resolve();
+    return deferred.promise;
+  };
 
   return IndexedDbCollection;
 
 })(Syncable);
+
+var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+window.IndexedDbSimpleCollection = (function(_super) {
+  __extends(IndexedDbSimpleCollection, _super);
+
+  function IndexedDbSimpleCollection() {
+    this.rebuildIndex = __bind(this.rebuildIndex, this);
+    this.afterLoadCollection = __bind(this.afterLoadCollection, this);
+    this.reset = __bind(this.reset, this);
+    this.deleteKey = __bind(this.deleteKey, this);
+    this.set = __bind(this.set, this);
+    this.findOrCreate = __bind(this.findOrCreate, this);
+    return IndexedDbSimpleCollection.__super__.constructor.apply(this, arguments);
+  }
+
+  IndexedDbSimpleCollection.prototype.findOrCreate = function(items) {
+    return new RSVP.Promise((function(_this) {
+      return function(resolve, reject) {
+        var promises;
+        if (!items) {
+          resolve();
+          return;
+        }
+        if (!(items instanceof Array)) {
+          items = [items];
+        }
+        if (!items[0]) {
+          resolve();
+          return;
+        }
+        promises = items.map(function(item) {
+          return _this.set(item, true);
+        });
+        return RSVP.all(promises).then(resolve)["catch"](reject);
+      };
+    })(this));
+  };
+
+  IndexedDbSimpleCollection.prototype.set = function(key, value) {
+    var item, newId;
+    if (this.actualCollection[key]) {
+      item = this.actualCollection[key];
+      item.value = value;
+      return this.updateById(item);
+    } else {
+      newId = this.getAvailableId();
+      this.actualCollection[key] = {
+        id: newId,
+        key: key,
+        value: value
+      };
+      return this.insert(this.actualCollection[key]);
+    }
+  };
+
+  IndexedDbSimpleCollection.prototype.deleteKey = function(key) {
+    var item;
+    item = this.actualCollection[key];
+    return this.deleteById(item.id).then((function(_this) {
+      return function() {
+        return delete _this.actualCollection[key];
+      };
+    })(this));
+  };
+
+  IndexedDbSimpleCollection.prototype.reset = function() {
+    IndexedDbSimpleCollection.__super__.reset.apply(this, arguments);
+    return this.actualCollection = {};
+  };
+
+  IndexedDbSimpleCollection.prototype.afterLoadCollection = function() {
+    var promise;
+    promise = IndexedDbSimpleCollection.__super__.afterLoadCollection.apply(this, arguments);
+    return promise.then((function(_this) {
+      return function() {
+        return _this.rebuildIndex();
+      };
+    })(this));
+  };
+
+  IndexedDbSimpleCollection.prototype.rebuildIndex = function() {
+    return new RSVP.Promise((function(_this) {
+      return function(resolve, reject) {
+        return _this.dba[_this.collectionName].query().all().execute().then(function(items) {
+          _this.actualCollection = {};
+          items.forEach(function(item) {
+            return _this.actualCollection[item.key] = item;
+          });
+          return resolve();
+        }, reject);
+      };
+    })(this));
+  };
+
+  return IndexedDbSimpleCollection;
+
+})(IndexedDbCollection);
 
 var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
 
@@ -1272,6 +1376,10 @@ IndexedDbDatabase = (function() {
           if (response.data.actions.length > 0) {
             try {
               return _this.applyActions(tableName, dbModel, response.data.actions).then(function(lastUpdatedAt) {
+                return dbModel.afterLoadCollection().then(function() {
+                  return lastUpdatedAt;
+                });
+              }).then(function(lastUpdatedAt) {
                 _this.storageService.setLocalLastSyncDate(_this.appName, tableName, lastUpdatedAt);
                 return _this.storageService.setLastModifiedDate(_this.appName, tableName, lastUpdatedAt);
               });

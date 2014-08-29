@@ -47,6 +47,7 @@ paths.coffee_scripts = [
             './src/js/db/syncable.coffee'
             './src/js/db/collection.coffee'
             './src/js/db/idb_collection.coffee'
+            './src/js/db/idb_simple_collection.coffee'
             './src/js/db/simple_collection.coffee'
             './src/js/db/database.coffee'
             './src/js/db/idb.coffee'

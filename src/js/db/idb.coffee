@@ -55,7 +55,10 @@ class IndexedDbDatabase
       perhapsResetPromise.then => 
         if response.data.actions.length > 0
           try
-            @applyActions(tableName, dbModel, response.data.actions).then (lastUpdatedAt) =>
+            @applyActions(tableName, dbModel, response.data.actions).then((lastUpdatedAt) =>
+              dbModel.afterLoadCollection().then ->
+                lastUpdatedAt
+            ).then (lastUpdatedAt) =>
               @storageService.setLocalLastSyncDate(@appName, tableName, lastUpdatedAt)
               @storageService.setLastModifiedDate(@appName, tableName, lastUpdatedAt)
           catch err

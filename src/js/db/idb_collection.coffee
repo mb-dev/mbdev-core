@@ -11,7 +11,7 @@ class window.IndexedDbCollection extends Syncable
     else
       @lastIssuedId = currentTime
 
-  createDatabase: (dbSchema, version) ->
+  createDatabase: (dbSchema, version) =>
     new RSVP.Promise (resolve, reject) =>
       version = 1 if !version
       db.open({
@@ -23,7 +23,7 @@ class window.IndexedDbCollection extends Syncable
         resolve()
       ).fail((err) =>
         console.log(err)
-        fail()
+        reject()
       )
   
   insert: (item, loadingProcess) =>
@@ -69,10 +69,10 @@ class window.IndexedDbCollection extends Syncable
         resolve()
       , reject
         
-  deleteById: (item, loadingProcess) =>
+  deleteById: (itemId, loadingProcess) =>
     new RSVP.Promise (resolve, reject) =>
-      @dba[@collectionName].remove(item.id).then =>
-        @onDelete(item) if !loadingProcess
+      @dba[@collectionName].remove(itemId).then =>
+        @onDelete(itemId) if !loadingProcess
         resolve()
       , reject
       
@@ -102,7 +102,7 @@ class window.IndexedDbCollection extends Syncable
       if updatedAt > @updatedAt
         @updatedAt = updatedAt
       promise.then ->
-        a =1 
+        a = 1
       , (err) -> 
         console.log err.stack
     , (err) ->
@@ -110,10 +110,12 @@ class window.IndexedDbCollection extends Syncable
       console.log err.stack
 
   $deleteItem: (itemId, updatedAt) =>
-    promise = @deleteById({id: itemId}, true)
+    promise = @deleteById(itemId, true)
     if updatedAt > @updatedAt
       @updatedAt = updatedAt
     promise
 
   afterLoadCollection: =>
-    
+    deferred = RSVP.defer()
+    deferred.resolve()
+    deferred.promise
