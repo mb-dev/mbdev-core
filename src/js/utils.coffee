@@ -148,9 +148,9 @@ angular.module('core.services', [])
     }
 
   .factory 'userService', ($http, storageService, $location) ->
-    if Lazy($location.host()).contains('local.com')
+    if _($location.host()).contains('local.com')
       apiServerUrl = 'http://api.moshebergman.local.com:10000/api/core'
-    else if Lazy($location.host()).contains('vagrant.com')
+    else if _($location.host()).contains('vagrant.com')
       apiServerUrl = 'http://api.moshebergman.vagrant.com/api/core'
     else
       apiServerUrl = 'https://api.moshebergman.com/api/core'
@@ -185,7 +185,7 @@ angular.module('core.directives', [])
       link: (scope, elm, attrs) ->
         currencyFilter = $filter('currency')
         scope.$watch attrs.amount, (value) ->
-          if typeof value != 'string'
+          if value && typeof value != 'string'
             value = value.toString()
           if (typeof value == 'undefined' || value == null)
             elm.html('')
@@ -362,7 +362,7 @@ angular.module('core.directives', [])
     angularCurrencyFilter = $filter('currency')
     (number) ->
       result = angularCurrencyFilter(number)
-      if result[0] == '('
+      if result and result[0] == '('
         '-' + result[1..-2]
       else
         result

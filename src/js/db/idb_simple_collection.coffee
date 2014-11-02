@@ -1,6 +1,6 @@
 class window.IndexedDbSimpleCollection extends IndexedDbCollection
   findOrCreate: (items) =>
-    new RSVP.Promise (resolve, reject) =>       
+    new RSVP.Promise (resolve, reject) =>
       if(!items)
         resolve()
         return
@@ -11,11 +11,20 @@ class window.IndexedDbSimpleCollection extends IndexedDbCollection
       promises = items.map (item) => @set(item, true)  
       RSVP.all(promises).then(resolve).catch(reject)
 
+  getAllKeys: =>
+    new RSVP.Promise (resolve, reject) =>       
+      resolve(Object.keys(@actualCollection))
+
   set: (key, value) =>    
     if @actualCollection[key]
       item = @actualCollection[key]
-      item.value = value
-      @updateById(item)
+      if item.value != value
+        item.value = value
+        @updateById(item)
+      else
+        deferred = RSVP.defer()
+        deferred.resolve()
+        deferred.promise
     else
       newId = @getAvailableId()
       @actualCollection[key] = {id: newId, key: key, value: value}

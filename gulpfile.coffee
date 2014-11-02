@@ -11,25 +11,20 @@ debug = require('gulp-debug');
 
 paths = {}
 paths.scripts = [
-            'bower_components/jquery/jquery.min.js',
-            'bower_components/select2/select2.js',
-            'bower_components/bootstrap/dist/js/bootstrap.js',
-            'bower_components/moment/moment.js',
-            'bower_components/bignumber.js/bignumber.js',
-            'bower_components/lazy.js/lazy.js',
-            'bower_components/typeahead.js/dist/typeahead.bundle.min.js'
+            'bower_components/jquery/jquery.min.js'
+            'bower_components/bootstrap/dist/js/bootstrap.min.js'
+            'bower_components/moment/moment.js'
+            'bower_components/bignumber.js/bignumber.js'
             'bower_components/angular/angular.min.js'
-            'bower_components/angular-mocks/angular-mocks.js'
             'bower_components/angular-route/angular-route.min.js'
             'bower_components/angular-sanitize/angular-sanitize.min.js'
             'bower_components/angular-resource/angular-resource.min.js'
             'bower_components/angular-cookies/angular-cookies.js'
             'bower_components/angular-moment/angular-moment.js'
-            'bower_components/angular-typeahead/angular-typeahead.js'
             'bower_components/angular-strap/dist/angular-strap.js'
+            'bower_components/angular-strap/dist/angular-strap.tpl.js'
             'bower_components/filer.js/src/filer.js'
             'bower_components/sjcl/sjcl.js'
-            'bower_components/angular-ui-select2/src/select2.js'
             'bower_components/checklist-model/checklist-model.js'
             'bower_components/amplify/lib/amplify.js'
             'bower_components/amplify/lib/amplify.store.js'
@@ -37,9 +32,11 @@ paths.scripts = [
             'bower_components/pickadate/lib/picker.date.js'
             'bower_components/pickadate/lib/picker.time.js'
             'bower_components/csv-js/csv.js'
-            'bower_components/selectize/dist/js/standalone/selectize.js'
+            'bower_components/async/lib/async.js'
             'bower_components/db.js/src/db.js'
             'bower_components/rsvp/rsvp.js'
+            'bower_components/lodash/dist/lodash.min.js'
+            'bower_components/selectize/dist/js/standalone/selectize.js'
             './src/js/extensions.js'
             ]
 paths.coffee_scripts = [

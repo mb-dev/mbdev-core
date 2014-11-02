@@ -17,3 +17,8 @@ RSVP.promiseWhile = function(condition, body) {
     loop();
   });
 };
+
+window.logError = function() {
+  console.log('failed');
+  throw new Error();
+}

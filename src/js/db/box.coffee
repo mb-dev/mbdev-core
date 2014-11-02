@@ -10,13 +10,13 @@ class window.Box
     @rowByHash[item] = row
   
   setColumns: (columns, valueTypes) ->
-    Lazy(@rows).each (row) ->
-      Lazy(columns).each (colValue) ->
+    @rows.forEach (row) ->
+      columns.forEach (colValue) ->
         column = row['columns'][colValue] = {}
         column['values'] = {}
-        Lazy(valueTypes).each (type) ->
+        (valueTypes).forEach (type) ->
           column['values'][type] ?= new BigNumber(0)
-      Lazy(valueTypes).each (type) ->
+      valueTypes.forEach (type) ->
         row['totals'][type] = new BigNumber(0)
       
 
@@ -36,7 +36,7 @@ class window.Box
   
   rowColumnValues: (row) =>
     return [] if !@rowByHash[row]
-    Lazy(@rowByHash[row]['columns']).pairs().map((item) -> {column: item[0], values: item[1].values }).toArray()
+    _(@rowByHash[row]['columns']).pairs().map((item) -> {column: item[0], values: item[1].values }).toArray()
 
   rowTotals: (row) =>
     if(!@rowByHash[row])

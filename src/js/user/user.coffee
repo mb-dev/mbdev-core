@@ -14,7 +14,6 @@ angular.module('core.controllers', [])
 
   .controller 'UserKeyController', ($scope, $window, storageService, $location, $q, db) ->
     $scope.key = ''
-    storageService.setupFilesystem()
     tables = Object.keys(db.tables)
 
     if !storageService.getUserDetails()
@@ -22,13 +21,7 @@ angular.module('core.controllers', [])
 
     $scope.onSubmit = ->
       storageService.setEncryptionKey($scope.key)
-      storageService.setupFilesystem().then -> 
-        db.createAllFiles(tables).then ->
-          $location.path('/welcome')
-        , () ->
-          $scope.error = 'Failed to set file system'
-      , () ->
-        $scope.error = 'Failed to set file system'
+      $location.path('/welcome')
 
   .controller 'UserProfileController', ($scope, $window, $location, $injector, db) ->
     tables = Object.keys(db.tables)

@@ -48,7 +48,7 @@ class IndexedDbDatabase
     @userService.readData(@appName, tableName, getDataFrom).then (response) =>
       # if we are doing force resync, then clear the collection first
       perhapsResetPromise = if forceLoadAll
-        dbModel.reset()
+        dbModel.clearAll()
       else
         RSVP.Promise.resolve()
       # start doing the actual sync
@@ -79,25 +79,29 @@ class IndexedDbDatabase
         @getTable(table.name, table.getFrom, forceLoadAll)
       RSVP.all(promises)
 
-  saveTables: (tableList, forceServerCleanAndSaveAll = false) =>    
+  _getActions: (dbModel, forceServerCleanAndSaveAll) ->
+    new RSVP.Promise (resolve, reject) =>
+      if forceServerCleanAndSaveAll
+        dbModel.getAll().then (items) =>
+          resolve(items.map (item) => {action: 'insert', id: item.id, item: sjcl.encrypt(@storageService.getEncryptionKey(), angular.toJson(item))})
+      else
+        actions = dbModel.actionsLog.map (action) => _.extend(_.clone(action), {item: sjcl.encrypt(@storageService.getEncryptionKey(), angular.toJson(action.item))}) 
+        resolve(actions)
+
+  saveTables: (tableList, forceServerCleanAndSaveAll = false) ->    
+    
     promises = []
     tableList.forEach (tableName) =>
       dbModel = @db[tableName]
 
-      actions = []
-      if forceServerCleanAndSaveAll
-        dbModel.collection.forEach (item) =>
-          actions.push({action: 'insert', id: item.id, item: sjcl.encrypt(@storageService.getEncryptionKey(), angular.toJson(item))})
-      else
-        actions = dbModel.actionsLog
-        actions.forEach (action) =>
-          if action.item
-            action.item = sjcl.encrypt(@storageService.getEncryptionKey(), angular.toJson(action.item))
-
-      promise = @userService.writeData(@appName, tableName, actions, forceServerCleanAndSaveAll).then (response) =>
-        dbModel.updatedAt = response.data.updatedAt
-        @storageService.setLastModifiedDate(@appName, tableName, dbModel.updatedAt)
-        dbModel.actionsLog = []
+      promise = @_getActions(dbModel, forceServerCleanAndSaveAll).then (actions) =>
+        if actions.length > 0
+          @userService.writeData(@appName, tableName, actions, forceServerCleanAndSaveAll).then (response) =>
+            dbModel.updatedAt = response.data.updatedAt
+            @storageService.setLastModifiedDate(@appName, tableName, dbModel.updatedAt)
+            dbModel.actionsLog = []
+            return
+        return
 
       promises.push(promise)
     

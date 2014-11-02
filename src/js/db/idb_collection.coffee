@@ -1,7 +1,8 @@
 class window.IndexedDbCollection extends Syncable
-  constructor: (appName, collectionName) ->
+  constructor: (appName, collectionName, sortColumn) ->
     @collectionName = collectionName
     @appName = appName
+    @sortColumn = sortColumn
     @reset()
 
   getAvailableId: =>
@@ -11,24 +12,26 @@ class window.IndexedDbCollection extends Syncable
     else
       @lastIssuedId = currentTime
 
+  stripItem: (item) ->
+    newItem = {}
+    newItem[key] = value for key,value of item when key[0] != '$'
+    newItem
+
   createDatabase: (dbSchema, version) =>
-    new RSVP.Promise (resolve, reject) =>
-      version = 1 if !version
-      db.open({
-        server: @appName,
-        version: version,
-        schema: dbSchema
-      }).done((client) =>
-        @dba = client
-        resolve()
-      ).fail((err) =>
-        console.log(err)
-        reject()
-      )
+    version = 1 if !version
+    db.open({
+      server: @appName,
+      version: version,
+      schema: dbSchema
+    }).then (client) =>
+      @dba = client
+    , logError
+    
   
   insert: (item, loadingProcess) =>
     new RSVP.Promise (resolve, reject) =>
       @beforeInsert(item)
+      item = @stripItem(item)
       @dba[@collectionName].add(item).then =>
         @onInsert(item) if !loadingProcess
         resolve()
@@ -36,7 +39,7 @@ class window.IndexedDbCollection extends Syncable
 
   insertMultiple: (items) =>
     new RSVP.Promise (resolve, reject) =>
-      items.forEach(@beforeInsert)
+      items.map(@stripItem).forEach(@beforeInsert)
       @dba[@collectionName].add.apply(@dba, items).then =>
         items.forEach (item) =>
           @onInsert(item)
@@ -49,8 +52,7 @@ class window.IndexedDbCollection extends Syncable
       @dba[@collectionName].clear().then(resolve, reject)
 
   getAll: =>
-    new RSVP.Promise (resolve, reject) =>
-      @dba[@collectionName].query().all().execute().then(resolve, reject)
+    @dba[@collectionName].query().all().execute()
 
   getItemsCount: =>
     new RSVP.Promise (resolve, reject) =>
@@ -62,8 +64,13 @@ class window.IndexedDbCollection extends Syncable
         resolve(results[0])
       , reject
 
+  findByIds: (ids) =>
+    promises = ids.map (id) => @findById(id)
+    RSVP.all(promises)
+
   updateById: (item, loadingProcess) =>
     new RSVP.Promise (resolve, reject) =>
+      item = @stripItem(item)
       @dba[@collectionName].update(item).then =>
         @onEdit(item) if !loadingProcess
         resolve()
@@ -76,6 +83,18 @@ class window.IndexedDbCollection extends Syncable
         resolve()
       , reject
       
+
+  # utilities
+
+  sortLazy: (items, columns) =>
+    if !columns && @sortColumn
+      columns = @sortColumn
+
+    if columns
+      _.sortBy(items, columns)
+    else
+      items
+
   # private
 
   reset: =>
