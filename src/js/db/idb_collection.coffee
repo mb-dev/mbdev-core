@@ -124,8 +124,8 @@ class window.IndexedDbCollection extends Syncable
         a = 1
       , (err) -> 
         console.log err.stack
-    , (err) ->
-      console.log err
+    , (err) =>
+      console.log err, @collectionName, item
       console.log err.stack
 
   $deleteItem: (itemId, updatedAt) =>

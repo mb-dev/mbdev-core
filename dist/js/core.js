@@ -368,10 +368,12 @@ window.IndexedDbCollection = (function(_super) {
           return console.log(err.stack);
         });
       };
-    })(this), function(err) {
-      console.log(err);
-      return console.log(err.stack);
-    });
+    })(this), (function(_this) {
+      return function(err) {
+        console.log(err, _this.collectionName, item);
+        return console.log(err.stack);
+      };
+    })(this));
   };
 
   IndexedDbCollection.prototype.$deleteItem = function(itemId, updatedAt) {
@@ -1249,7 +1251,8 @@ angular.module('core.directives', []).directive('currencyWithSign', function($fi
     restrict: 'A',
     require: '?ngModel',
     link: function(scope, element, attrs, ngModel) {
-      return $timeout(function() {
+      var updateSelectize;
+      updateSelectize = function() {
         var allItems, alteredAllItems, selectedItem;
         if (attrs.selectize === 'stringsWithCreate') {
           allItems = scope.$eval(attrs.allItems);
@@ -1270,6 +1273,9 @@ angular.module('core.directives', []).directive('currencyWithSign', function($fi
               }
             }
           }
+          ngModel.$parsers.push(function(value) {
+            return value.split(',');
+          });
           return $(element).selectize({
             plugins: ['restore_on_backspace'],
             persist: false,
@@ -1293,6 +1299,9 @@ angular.module('core.directives', []).directive('currencyWithSign', function($fi
               };
             });
           }
+          ngModel.$parsers.push(function(value) {
+            return value.split(',');
+          });
           return $(element).selectize({
             persist: false,
             sortField: 'text',
@@ -1310,6 +1319,17 @@ angular.module('core.directives', []).directive('currencyWithSign', function($fi
             valueField: 'id',
             labelField: 'name',
             searchField: 'name'
+          });
+        }
+      };
+      return $timeout(function() {
+        if (attrs.allItems && attrs.allItems.length > 0) {
+          return updateSelectize();
+        } else {
+          return attrs.$observe('allItems', function(newValue) {
+            if (newValue && newValue.length > 0) {
+              return updateSelectize();
+            }
           });
         }
       });

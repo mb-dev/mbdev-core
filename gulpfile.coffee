@@ -23,6 +23,7 @@ paths.scripts = [
             'bower_components/angular-moment/angular-moment.js'
             'bower_components/angular-strap/dist/angular-strap.js'
             'bower_components/angular-strap/dist/angular-strap.tpl.js'
+            'bower_components/angular-elastic/elastic.js'
             'bower_components/filer.js/src/filer.js'
             'bower_components/sjcl/sjcl.js'
             'bower_components/checklist-model/checklist-model.js'

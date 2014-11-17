@@ -299,8 +299,7 @@ angular.module('core.directives', [])
     restrict: 'A',
     require: '?ngModel',
     link: (scope, element, attrs, ngModel) ->
-
-      $timeout ->
+      updateSelectize = ->
         if attrs.selectize == 'stringsWithCreate'
           allItems = scope.$eval(attrs.allItems)
           if allItems
@@ -308,6 +307,8 @@ angular.module('core.directives', [])
             if !attrs.multiple
               selectedItem = ngModel.$modelValue
               alteredAllItems.push({value: selectedItem, text: selectedItem}) if selectedItem && allItems.indexOf(selectedItem) < 0
+          ngModel.$parsers.push (value) ->
+            value.split(',')
           $(element).selectize({
             plugins: ['restore_on_backspace']
             persist: false
@@ -322,6 +323,8 @@ angular.module('core.directives', [])
           allItems = scope.$eval(attrs.allItems)
           if allItems
             alteredAllItems = allItems.map (item) -> {value: item, text: item} 
+          ngModel.$parsers.push (value) ->
+            value.split(',')
           $(element).selectize({
             persist: false
             sortField: 'text'
@@ -337,6 +340,14 @@ angular.module('core.directives', [])
             labelField: 'name'
             searchField: 'name'
           })
+      $timeout -> 
+        if attrs.allItems and attrs.allItems.length > 0
+          updateSelectize()
+        else
+          attrs.$observe 'allItems', (newValue) ->
+            if newValue and newValue.length > 0
+              updateSelectize()
+          
 
  angular.module('core.filters', [])
   .filter 'localDate', ($filter) ->
