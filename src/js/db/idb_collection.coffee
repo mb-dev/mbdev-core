@@ -60,9 +60,12 @@ class window.IndexedDbCollection extends Syncable
 
   findById: (id) =>
     new RSVP.Promise (resolve, reject) =>
-      @dba[@collectionName].query('id').only(id).execute().then (results) =>
-        resolve(results[0])
-      , reject
+      if !id
+        resolve()
+      else
+        @dba[@collectionName].query('id').only(id).execute().then (results) =>
+          resolve(results[0])
+        , reject
 
   findByIds: (ids) =>
     promises = ids.map (id) => @findById(id)

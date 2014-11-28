@@ -276,9 +276,13 @@ window.IndexedDbCollection = (function(_super) {
   IndexedDbCollection.prototype.findById = function(id) {
     return new RSVP.Promise((function(_this) {
       return function(resolve, reject) {
-        return _this.dba[_this.collectionName].query('id').only(id).execute().then(function(results) {
-          return resolve(results[0]);
-        }, reject);
+        if (!id) {
+          return resolve();
+        } else {
+          return _this.dba[_this.collectionName].query('id').only(id).execute().then(function(results) {
+            return resolve(results[0]);
+          }, reject);
+        }
       };
     })(this));
   };
