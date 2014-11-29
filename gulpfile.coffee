@@ -8,6 +8,8 @@ gulpif = require('gulp-if')
 spawn = require('child_process').spawn
 path = require('path');
 debug = require('gulp-debug');
+plumber = require('gulp-plumber')
+notify = require("gulp-notify")
 
 paths = {}
 paths.scripts = [
@@ -66,20 +68,24 @@ paths.views = ['./src/views/**/*.jade']
 
 gulp.task 'build-views', ->
   gulp.src(paths.views)
+    .pipe(plumber({errorHandler: notify.onError("Error: <%= error.message %>")}))
     .pipe(jade())
     .pipe(gulp.dest('./dist/views'))
 
 gulp.task 'build-js', ->
   gulp.src(paths.scripts)
+    .pipe(plumber({errorHandler: notify.onError("Error: <%= error.message %>")}))
     .pipe(concat('vendor.js'))
     .pipe(gulp.dest('dist/js'))
   gulp.src(paths.coffee_scripts)
-    .pipe(gulpif(/[.]coffee$/, coffee({bare: true}).on('error', gutil.log)))
+    .pipe(plumber({errorHandler: notify.onError("Error: <%= error.message %>")}))
+    .pipe(gulpif(/[.]coffee$/, coffee({bare: true})))
     .pipe(concat('core.js'))
     .pipe(gulp.dest('dist/js'))
 
 gulp.task 'build-css', ->
   gulp.src(paths.styles)    
+    .pipe(plumber({errorHandler: notify.onError("Error: <%= error.message %>")}))
     .pipe(concat('vendor.css'))
     .pipe(gulp.dest('dist/css'))
 

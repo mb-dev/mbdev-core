@@ -279,9 +279,13 @@ window.IndexedDbCollection = (function(_super) {
         if (!id) {
           return resolve();
         } else {
-          return _this.dba[_this.collectionName].query('id').only(id).execute().then(function(results) {
-            return resolve(results[0]);
-          }, reject);
+          try {
+            return _this.dba[_this.collectionName].query('id').only(id).execute().then(function(results) {
+              return resolve(results[0]);
+            }, reject);
+          } catch (_error) {
+            return resolve(null);
+          }
         }
       };
     })(this));
@@ -358,7 +362,7 @@ window.IndexedDbCollection = (function(_super) {
     return this.findById(item.id).then((function(_this) {
       return function(existingItem) {
         if (existingItem) {
-          promise = _this.updateById(item.id, item, true);
+          promise = _this.updateById(item, true);
         } else {
           promise = _this.insert(item, true);
         }
@@ -1084,12 +1088,40 @@ angular.module('core.directives', []).directive('currencyWithSign', function($fi
       var currencyFilter;
       currencyFilter = $filter('currency');
       return scope.$watch(attrs.amount, function(value) {
-        if (value && typeof value !== 'string') {
-          value = value.toString();
+        var compareTo;
+        if (isNaN(value)) {
+          elm.html('');
+          return;
         }
-        if (typeof value === 'undefined' || value === null) {
-          return elm.html('');
-        } else if (value[0] === '-') {
+        if (typeof value === 'string') {
+          value = parseInt(value, 10);
+        }
+        compareTo = attrs.compareto ? scope.$eval(attrs.compareto) : 0;
+        if (value < compareTo) {
+          return elm.html('<span class="negative">' + currencyFilter(value) + '</span>');
+        } else {
+          return elm.html('<span class="positive">' + currencyFilter(value) + '</span>');
+        }
+      });
+    }
+  };
+}).directive('currencyWithSignComparison', function($filter) {
+  return {
+    restrict: 'E',
+    link: function(scope, elm, attrs) {
+      var currencyFilter;
+      currencyFilter = $filter('currency');
+      return scope.$watch(attrs.amount, function(value) {
+        var compareTo;
+        if (isNaN(value)) {
+          elm.html('');
+          return;
+        }
+        if (typeof value === 'string') {
+          value = parseInt(value, 10);
+        }
+        compareTo = attrs.compareto ? scope.$eval(attrs.compareto) : 0;
+        if (value > compareTo) {
           return elm.html('<span class="negative">' + currencyFilter(value) + '</span>');
         } else {
           return elm.html('<span class="positive">' + currencyFilter(value) + '</span>');

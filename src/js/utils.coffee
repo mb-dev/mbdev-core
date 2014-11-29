@@ -185,11 +185,31 @@ angular.module('core.directives', [])
       link: (scope, elm, attrs) ->
         currencyFilter = $filter('currency')
         scope.$watch attrs.amount, (value) ->
-          if value && typeof value != 'string'
-            value = value.toString()
-          if (typeof value == 'undefined' || value == null)
+          if isNaN(value)
             elm.html('')
-          else if value[0] == '-'
+            return
+          if typeof value == 'string'
+            value = parseInt(value, 10)
+          compareTo = if attrs.compareto then scope.$eval(attrs.compareto) else 0
+          if value < compareTo
+            elm.html('<span class="negative">' + currencyFilter(value) + '</span>')
+          else
+            elm.html('<span class="positive">' + currencyFilter(value) + '</span>')
+    }
+
+  .directive 'currencyWithSignComparison', ($filter) ->
+    {
+      restrict: 'E',
+      link: (scope, elm, attrs) ->
+        currencyFilter = $filter('currency')
+        scope.$watch attrs.amount, (value) ->
+          if isNaN(value)
+            elm.html('')
+            return
+          if typeof value == 'string'
+            value = parseInt(value, 10)
+          compareTo = if attrs.compareto then scope.$eval(attrs.compareto) else 0
+          if value > compareTo
             elm.html('<span class="negative">' + currencyFilter(value) + '</span>')
           else
             elm.html('<span class="positive">' + currencyFilter(value) + '</span>')

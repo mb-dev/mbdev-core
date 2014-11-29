@@ -198,13 +198,8 @@ form {
     margin-right: 7px;
   }
   .list-group-item.header {
-    padding: 10px 15px;
     > * {
       font-weight: bold;
-    }
-    &.compact {
-      padding-left: 0;
-      padding-right: 0;
     }
     &.pull {
       margin-left: -15px;
@@ -212,7 +207,13 @@ form {
     }
   }
   .list-group-item {
-    padding: 10px 0;
+    padding: 0;
+    > div, a > div {
+      padding: 10px 15px;
+    }
+    &.header {
+      padding: 10px 0;
+    }
     &:nth-child(even) {
       background-color: @table-bg-accent;
     }
@@ -228,13 +229,17 @@ form {
     .list-group-item {
       padding: 0;
       &.header {
-        padding: 10px 0;
+        > div {
+          padding-left: 0px;
+          padding-right: 0px;
+        }
         &:hover {
           background-color: #fff;
         }
       }
       > a {
-        padding: 10px 0;
+        padding-left: 0px;
+        padding-right: 0px;
         div {
           color: #333333;
         }
@@ -254,6 +259,9 @@ form {
       border: none;
       border-bottom: 1px solid #efefef;
       margin-bottom: 0;
+      > div, a > div {
+        padding: 0 15px;
+      }
       &.header {
         padding-top: 8px;
         padding-bottom: 8px;

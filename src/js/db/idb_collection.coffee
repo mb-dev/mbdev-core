@@ -63,9 +63,12 @@ class window.IndexedDbCollection extends Syncable
       if !id
         resolve()
       else
-        @dba[@collectionName].query('id').only(id).execute().then (results) =>
-          resolve(results[0])
-        , reject
+        try
+          @dba[@collectionName].query('id').only(id).execute().then (results) =>
+            resolve(results[0])
+          , reject
+        catch
+          resolve(null)
 
   findByIds: (ids) =>
     promises = ids.map (id) => @findById(id)
@@ -117,7 +120,7 @@ class window.IndexedDbCollection extends Syncable
     promise = null
     @findById(item.id).then (existingItem) =>
       if existingItem
-        promise = @updateById(item.id, item, true)
+        promise = @updateById(item, true)
       else
         promise = @insert(item, true)
       
