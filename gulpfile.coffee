@@ -25,6 +25,9 @@ paths.scripts = [
             'bower_components/angular-moment/angular-moment.js'
             'bower_components/angular-strap/dist/angular-strap.js'
             'bower_components/angular-strap/dist/angular-strap.tpl.js'
+            'bower_components/d3/d3.js'
+            'bower_components/nvd3/nv.d3.js'
+            'bower_components/angular-nvd3/dist/angular-nvd3.js'
             'bower_components/angular-elastic/elastic.js'
             'bower_components/filer.js/src/filer.js'
             'bower_components/sjcl/sjcl.js'
@@ -62,6 +65,7 @@ paths.styles = [
             'bower_components/pickadate/lib/themes/default.time.css'
             'bower_components/select2/select2.css'
             'vendor/css/select2-bootstrap.css'
+            'bower_components/nvd3/nv.d3.css'
           ]
 
 paths.views = ['./src/views/**/*.jade']

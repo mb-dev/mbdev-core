@@ -660,9 +660,13 @@ IndexedDbDatabase = (function() {
           });
         } else {
           actions = dbModel.actionsLog.map(function(action) {
-            return _.extend(_.clone(action), {
-              item: sjcl.encrypt(_this.storageService.getEncryptionKey(), angular.toJson(action.item))
-            });
+            if (action.item) {
+              return _.extend(_.clone(action), {
+                item: sjcl.encrypt(_this.storageService.getEncryptionKey(), angular.toJson(action.item))
+              });
+            } else {
+              return _.clone(action);
+            }
           });
           return resolve(actions);
         }
@@ -699,7 +703,7 @@ IndexedDbDatabase = (function() {
       };
     })(this), (function(_this) {
       return function(error) {
-        console.log('failed to write tables to the web', error);
+        console.log('failed to write tables to the web', error, error.stack);
         return {
           data: error.data,
           status: error.status,

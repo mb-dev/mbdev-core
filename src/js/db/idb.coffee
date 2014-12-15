@@ -85,7 +85,11 @@ class IndexedDbDatabase
         dbModel.getAll().then (items) =>
           resolve(items.map (item) => {action: 'insert', id: item.id, item: sjcl.encrypt(@storageService.getEncryptionKey(), angular.toJson(item))})
       else
-        actions = dbModel.actionsLog.map (action) => _.extend(_.clone(action), {item: sjcl.encrypt(@storageService.getEncryptionKey(), angular.toJson(action.item))}) 
+        actions = dbModel.actionsLog.map (action) => 
+          if action.item
+            _.extend(_.clone(action), {item: sjcl.encrypt(@storageService.getEncryptionKey(), angular.toJson(action.item))}) 
+          else
+            _.clone(action)
         resolve(actions)
 
   saveTables: (tableList, forceServerCleanAndSaveAll = false) ->    
@@ -108,7 +112,7 @@ class IndexedDbDatabase
     RSVP.all(promises).then (actions) =>
       nothing = true
     , (error) =>
-      console.log 'failed to write tables to the web', error
+      console.log 'failed to write tables to the web', error, error.stack
       {data: error.data, status: error.status, headers: error.headers}
 
 
